@@ -1,0 +1,32 @@
+---
+title: "context_prep"
+format: html
+editor: source
+---
+
+# Get human data
+
+```{r}
+library(tidyverse)
+
+human_data <- read_csv(url("https://raw.githubusercontent.com/vboyce/tg-matcher/refs/heads/main/data/tgmatcheryoked-trials.csv"))
+```
+
+```{r}
+human_selections <- human_data |>
+  filter(!is.na(correct_tangram)) |>
+  filter(type == "selection") |>
+  select(
+    workerid, correct, correct_tangram, condition,
+    gameId, selected, text, trial_index, type, orig_trialNum, orig_repNum
+  ) |>
+  mutate(workerid = as.factor(workerid)) |>
+  mutate(
+    matcher_trialNum = (trial_index - 3) %/% 3,
+    matcher_repNum = matcher_trialNum %/% 12
+  ) |>
+  mutate(workerid = ifelse(workerid == "3157" & condition == "yoked", "3157a", workerid)) |> # somehow two participants were assigned to 3157 -- but each set looks complete?
+  filter(workerid != "141") |>
+  filter(workerid != "35") # exclude two participants who didn't finish
+```
+
