@@ -154,3 +154,61 @@ ablated <- nested |>
 write_csv(ablated, here("context_prep", "ablated.csv"))
 ```
 
+## Wrong-within
+```{r}
+wrong_within_nested <- nested |> 
+  select(gameId, trialNum, repNum, tangram) |> 
+  left_join(nested |> select(gameId, repNum, messages, tangram), 
+            by = join_by(repNum, tangram),
+            relationship = "many-to-many") |> 
+  filter(gameId.x != gameId.y)
+  
+wrong_within_cumul <- wrong_within_nested |> 
+  select(gameId.x, gameId.y, trialNum) |> 
+  left_join(wrong_within_nested |> 
+            select(gameId.x, gameId.y, msg_trial_num = trialNum, messages, tangram), 
+            by = join_by(gameId.x, gameId.y, trialNum > msg_trial_num)) |> 
+  group_by(gameId.x, gameId.y, trialNum) |>
+  summarise(message_history = messages |> toJSON(),
+            target_history = tangram |> toJSON(),
+            .groups = "drop") |>
+  mutate(message_history = ifelse(message_history == "[{}]", "[]", message_history),
+         target_history = ifelse(target_history == "[null]", "[]", target_history))
+
+wrong_within <- nested |> 
+  left_join(wrong_within_cumul, by = join_by(gameId == gameId.x, trialNum)) |>
+  mutate(message = map_vec(messages, toJSON),
+         condition = "wrong_within") |> 
+  rename(target = tangram) |> 
+  select(-messages)
+write_csv(wrong_within, here("context_prep", "wrong_within.csv"))
+```
+
+## Wrong-across
+```{r}
+wrong_across_nested <- wrong_within_nested |> 
+  group_by(gameId.x, trialNum) |> 
+  mutate(gameId.y = sample(gameId.y))
+
+wrong_across_cumul <- wrong_across_nested |> 
+  select(gameId.x, gameId.y, trialNum) |> 
+  left_join(wrong_across_nested |> 
+            select(gameId.x, gameId.y, msg_trial_num = trialNum, messages, tangram), 
+            by = join_by(gameId.x, gameId.y, trialNum > msg_trial_num)) |> 
+  group_by(gameId.x, gameId.y, trialNum) |>
+  summarise(message_history = messages |> toJSON(),
+            target_history = tangram |> toJSON(),
+            .groups = "drop") |>
+  mutate(message_history = ifelse(message_history == "[{}]", "[]", message_history),
+         target_history = ifelse(target_history == "[null]", "[]", target_history))
+
+wrong_across <- nested |> 
+  left_join(wrong_across_cumul, by = join_by(gameId == gameId.x, trialNum)) |>
+  mutate(message = map_vec(messages, toJSON),
+         condition = "wrong_across") |> 
+  rename(target = tangram) |> 
+  select(-messages)
+write_csv(wrong_across, here("context_prep", "wrong_across.csv"))
+```
+
+
