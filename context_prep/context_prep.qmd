@@ -18,7 +18,7 @@ human_selections <- human_data |>
   filter(type == "selection") |>
   select(
     workerid, correct, correct_tangram, condition,
-    gameId, selected, text, trial_index, type, orig_trialNum, orig_repNum
+    gameId, selected, trial_index, type, orig_trialNum, orig_repNum
   ) |>
   mutate(workerid = as.factor(workerid)) |>
   mutate(
@@ -27,6 +27,37 @@ human_selections <- human_data |>
   ) |>
   mutate(workerid = ifelse(workerid == "3157" & condition == "yoked", "3157a", workerid)) |> # somehow two participants were assigned to 3157 -- but each set looks complete?
   filter(workerid != "141") |>
-  filter(workerid != "35") # exclude two participants who didn't finish
+  filter(workerid != "35") |> # exclude two participants who didn't finish
+  select(-trial_index)
 ```
+
+# Reconstruct trials
+
+
+```{r}
+choose <- c(
+  "Z2WAkYpWiXwuGcdME", "GWCD2NGoiA2n5Wh2i", "zviCQXNM4xWoYTmoY", "MEJ8y7jRW4947MPrH",
+  "x8BXJBHh3RxchPoHv", "rSMFkjhskBteiyQMB", "LzNv7CD7gRuxpk7cQ", "MDLyuv29jevaGLSeT",
+  "BTbGhXZvjdSFubTBg", "22dyGMRgestp8u5Lc"
+)
+
+original_chat <- read_csv(url("https://raw.githubusercontent.com/vboyce/tg-matcher/refs/heads/main/expt_prep_code/combined_chat.csv")) |> filter(gameId %in% choose)
+```
+
+```{r}
+nested <- original_chat |>
+  mutate(
+    role = case_when(
+      role == "speaker" ~ "describer",
+      role == "listener" ~ "matcher"
+    ),
+    playerCount = ifelse(is.na(activePlayerCount), numPlayers, activePlayerCount),
+    original_pct_correct = realCorrect / (playerCount - 1)
+  ) |>
+  select(gameId, trialNum, repNum, tangram, role, text, original_pct_correct) |>
+  group_by(gameId, trialNum, repNum, tangram, original_pct_correct) |>
+  mutate(message_number = row_number()) |>
+  nest(messages = c(role, text, message_number))
+```
+
 
