@@ -76,11 +76,12 @@ yoked_combined <- bind_rows(
 ggplot(yoked_combined,
        aes(x = repNum, y = accuracy, col = type)) +
   geom_hline(yintercept = 1/12, lty = "dashed") +
-  geom_point(position = position_jitter(width = .2), alpha = .2) +
+  geom_point(position = position_jitter(width = .2), alpha = .1) +
   stat_summary(aes(group = interaction(gameId, type)), 
                fun = mean, geom = "line", alpha = .2) +
   # geom_line(aes(group = interaction(gameId, tangram, type)), alpha = .2) +
-  geom_smooth(method = "glm", formula = y ~ log(x + 1))
+  geom_smooth(method = "glm", formula = y ~ log(x + 1)) +
+  labs(x = "Repetition number", y = "Accuracy", col = "Type")
 ```
 
 
