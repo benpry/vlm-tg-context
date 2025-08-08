@@ -1,6 +1,8 @@
-from ast import literal_eval
 import warnings
+from ast import literal_eval
+
 from sglang.lang.chat_template import get_chat_template
+
 
 def get_image_token(model_name):
     """
@@ -27,7 +29,10 @@ def get_user_message(messages):
 
     user_message = ""
     for message in messages:
-        user_message += f"{message['role']}: {message['text']}\n"
+        if "text" not in message:
+            warnings.warn(f"Message {message} is missing 'text' field.")
+        else:
+            user_message += f"{message['role']}: {message['text']}\n"
 
     return user_message
 
@@ -37,7 +42,7 @@ def preprocess_messages(row):
     Turn a row of the dataframe into a list of messages for the chat model.
     """
     chat_messages = []
-    this_trial_messages = row["messages"]
+    this_trial_messages = row["message"]
     if not isinstance(this_trial_messages, str):
         chat_messages.append({"role": "user", "content": "describer: \n"})
     else:
@@ -58,6 +63,7 @@ def get_sgl_chat_template(model_name):
     else:
         raise ValueError(f"Model {model_name} not supported")
 
+
 def get_logprobs_from_outputs(outputs, choice_tokens, choice_token_ids):
     """
     Get the log probabilities of the choice tokens from the model outputs.
@@ -69,10 +75,33 @@ def get_logprobs_from_outputs(outputs, choice_tokens, choice_token_ids):
         all_choice_logprobs.append(choice_logprobs)
         for logprob, token_id, _ in logprobs:
             if token_id in choice_token_ids:
-                choice_logprobs[choice_tokens[choice_token_ids.index(token_id)]] = logprob
+                choice_logprobs[choice_tokens[choice_token_ids.index(token_id)]] = (
+                    logprob
+                )
 
             if len(choice_logprobs) == len(choice_tokens):
                 break
+        if len(choice_logprobs) < len(choice_tokens):
+            warnings.warn("Not all choice tokens found in top logprobs.")
+
+    return all_choice_logprobs
+
+
+def get_logprobs_from_outputs_vllm(outputs, choice_tokens, choice_token_ids):
+    """
+    Get the log probabilities of the choice tokens from the model outputs.
+    """
+    all_choice_logprobs = []
+    for output in outputs:
+        choice_logprobs = {}
+        all_choice_logprobs.append(choice_logprobs)
+        logprobs = output.outputs[0].logprobs[0].values()
+        for logprob in logprobs:
+            if logprob.decoded_token.strip() in choice_tokens:
+                choice_logprobs[logprob.decoded_token.strip()] = logprob.logprob
+            if len(choice_logprobs) == len(choice_tokens):
+                break
+
         if len(choice_logprobs) < len(choice_tokens):
             warnings.warn("Not all choice tokens found in top logprobs.")
 
