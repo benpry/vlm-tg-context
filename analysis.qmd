@@ -52,7 +52,6 @@ yoked_human <- human_selections |>
   mutate(type = "human_naive")
 ```
 
-
 ```{r}
 yoked_qwen <- read_csv(here(OUTPUT_LOC, "yoked_Qwen2.5-VL-32B-Instruct_logprobs.csv"))
 
@@ -73,14 +72,15 @@ yoked_combined <- bind_rows(
 ```
 
 ```{r}
-ggplot(yoked_combined,
+ggplot(yoked_combined |> mutate(repNum = repNum + 1),
        aes(x = repNum, y = accuracy, col = type)) +
   geom_hline(yintercept = 1/12, lty = "dashed") +
   geom_point(position = position_jitter(width = .2), alpha = .1) +
   stat_summary(aes(group = interaction(gameId, type)), 
                fun = mean, geom = "line", alpha = .2) +
   # geom_line(aes(group = interaction(gameId, tangram, type)), alpha = .2) +
-  geom_smooth(method = "glm", formula = y ~ log(x + 1)) +
+  geom_smooth(method = "glm", formula = y ~ log(x)) +
+  scale_x_continuous(breaks = 1:6) +
   labs(x = "Repetition number", y = "Accuracy", col = "Type")
 ```
 
