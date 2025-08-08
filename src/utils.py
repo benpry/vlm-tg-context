@@ -1,5 +1,6 @@
 from ast import literal_eval
-
+import warnings
+from sglang.lang.chat_template import get_chat_template
 
 def get_image_token(model_name):
     """
@@ -46,3 +47,33 @@ def preprocess_messages(row):
         )
 
     return chat_messages
+
+
+def get_sgl_chat_template(model_name):
+    """
+    Get the chat template for a given model.
+    """
+    if "Qwen" in model_name:
+        return get_chat_template("qwen2-vl")
+    else:
+        raise ValueError(f"Model {model_name} not supported")
+
+def get_logprobs_from_outputs(outputs, choice_tokens, choice_token_ids):
+    """
+    Get the log probabilities of the choice tokens from the model outputs.
+    """
+    all_choice_logprobs = []
+    for output in outputs:
+        logprobs = output["meta_info"]["output_top_logprobs"][0]
+        choice_logprobs = {}
+        all_choice_logprobs.append(choice_logprobs)
+        for logprob, token_id, _ in logprobs:
+            if token_id in choice_token_ids:
+                choice_logprobs[choice_tokens[choice_token_ids.index(token_id)]] = logprob
+
+            if len(choice_logprobs) == len(choice_tokens):
+                break
+        if len(choice_logprobs) < len(choice_tokens):
+            warnings.warn("Not all choice tokens found in top logprobs.")
+
+    return all_choice_logprobs

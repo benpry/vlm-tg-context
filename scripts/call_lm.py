@@ -17,7 +17,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model_name",
         type=str,
-        default="Qwen/Qwen2.5-VL-7B-Instruct",
+        default="Qwen/Qwen2.5-VL-32B-Instruct",
         help="the name of the model to evaluate",
     )
     parser.add_argument(
@@ -42,7 +42,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     dfs = []
-    for filepath in args.data_filepaths.split(";"):
+    data_filepaths = args.data_filepaths.split(";")
+    for filepath in data_filepaths:
         dfs.append(pd.read_csv(here(filepath)))
 
     grid_image = Image.open(here(args.grid_image_path))
@@ -56,7 +57,7 @@ if __name__ == "__main__":
     )
     
     # Save results
-    for i, df in enumerate(result_dfs):
-        output_path = f"data/logits_results_{i}.csv"
+    for filepath, df in zip(data_filepaths, result_dfs):
+        output_path = filepath.replace(".csv", f"_{args.model_name.split('/')[-1]}_logprobs.csv")
         df.to_csv(here(output_path), index=False)
         print(f"Results saved to {output_path}")

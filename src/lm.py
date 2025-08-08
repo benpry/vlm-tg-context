@@ -11,9 +11,7 @@ import pandas as pd
 import torch
 from PIL import Image
 from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
-from qwen_vl_utils import process_vision_info
 from tqdm import tqdm
-from kernels import get_kernel
 
 
 import sglang as sgl
@@ -21,15 +19,10 @@ from sglang.srt.conversation import chat_templates
 from sglang.test.test_utils import is_in_ci
 from sglang.utils import async_stream_and_merge, stream_and_merge
 
-from src.utils import get_image_token, preprocess_messages
+from src.utils import get_image_token, preprocess_messages, get_sgl_chat_template, get_logprobs_from_outputs
 
-
-if is_in_ci():
-    import patch
-else:
-    import nest_asyncio
-
-    nest_asyncio.apply()
+import nest_asyncio
+nest_asyncio.apply()
 
 SYSTEM_PROMPT = """You will be presented with a list of messages between people playing a reference game, where the describer has to get the matcher to choose an image from a list of images. Your goal is to guess which of the images the describer is trying to get the matcher to choose. The images, with their labels, are shown in the image.
 ForCausalLM
@@ -37,7 +30,6 @@ Please answer with just the letter corresponding to the image you think the desc
 """
 
 CHOICES = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"]
-
 
 def get_logits(
     dfs: list[pd.DataFrame],
@@ -52,11 +44,13 @@ def get_logits(
         processor.tokenizer.encode(choice, add_special_tokens=False)[0] for choice in CHOICES
     ]
 
-    flash_attn = get_kernel("kernels-community/flash-attn")
+    # model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+    #     model_name, torch_dtype=torch.bfloat16, device_map="auto", attn_implementation="kernels-community/flash-attn", trust_remote_code=True
+    # )
 
-    model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-        model_name, torch_dtype=torch.bfloat16, device_map="auto", attn_implementation="kernels-community/flash-attn", trust_remote_code=True
-    )
+    sgl_template = get_sgl_chat_template(model_name)
+    llm = sgl.Engine(model_path=model_name, device="cuda", dtype="bfloat16", cuda_graph_max_bs=16, pp_size=1, tp_size=4, trust_remote_code=True)
+    sampling_params = {"max_new_tokens": 1}
 
     # Collect all messages from all dataframes first
     all_messages = []
@@ -85,10 +79,6 @@ def get_logits(
             df_indices.append(df_idx)
             row_indices.append(row_idx)
 
-        # Process vision info once for all messages (they all use the same image)
-        print("Processing vision information...")
-        image_inputs, _ = process_vision_info(all_messages[0])
-
         # Apply chat template to all messages
         print("Applying chat templates...")
         all_texts = []
@@ -98,40 +88,18 @@ def get_logits(
             )
             all_texts.append(text)
 
-        # Process all messages in batches
-        all_choice_logits = []
-        print("Processing inference in batches...")
-        
-        for i in tqdm(range(0, len(all_messages), batch_size)):
-            batch_texts = all_texts[i:i+batch_size]
-            batch_size_actual = len(batch_texts)
+        print("Doing inference in batches...")
+        outputs = llm.generate(
+            all_texts,
+            sampling_params,
+            image_data=[grid_image]*len(all_texts),
+            return_logprob=True,
+            top_logprobs_num=1000,
+        )
 
-            # Extract the corresponding image/video inputs for this batch
-            batch_image_inputs = image_inputs * batch_size_actual
+        all_choice_logprobs = get_logprobs_from_outputs(outputs, CHOICES, choice_token_ids)
 
-            # Process batch
-            inputs = processor(
-                text=batch_texts,
-                images=batch_image_inputs,
-                padding=True,
-                return_tensors="pt"
-            )
-
-            inputs = inputs.to(model.device)
-
-            with torch.inference_mode():
-                out = model(**inputs)
-
-            del inputs
-
-            logits = out.logits
-            
-            # Extract choice logits for each item in the batch
-            for j in range(batch_size_actual):
-                choice_logits = [logits[j, -1, tid].item() for tid in choice_token_ids]
-                all_choice_logits.append(choice_logits)
-
-        df["model_logits"] = all_choice_logits
+        df["model_logprobs"] = all_choice_logprobs
         
         return_dfs.append(
             df[
@@ -141,7 +109,7 @@ def get_logits(
                     "rep_num",
                     "trial_num",
                     "chat_prompt",
-                    "model_logits",
+                    "model_logprobs",
                     "target",
                 ]
             ]
