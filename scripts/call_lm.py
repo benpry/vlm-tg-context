@@ -17,7 +17,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model_name",
         type=str,
-        default="Qwen/Qwen2.5-VL-32B-Instruct",
+        default="Qwen/Qwen2.5-VL-7B-Instruct",
         help="the name of the model to evaluate",
     )
     parser.add_argument(
@@ -32,6 +32,12 @@ if __name__ == "__main__":
         default=None,
         help="the number of trials to evaluate (default: all)",
     )
+    parser.add_argument(
+        "--batch_size",
+        type=int,
+        default=32,
+        help="the batch size for processing (default: 32)",
+    )
 
     args = parser.parse_args()
 
@@ -41,8 +47,16 @@ if __name__ == "__main__":
 
     grid_image = Image.open(here(args.grid_image_path))
 
-    get_logits(
+    result_dfs = get_logits(
         dfs,
         args.model_name,
         grid_image,
+        n_trials=args.n_trials,
+        batch_size=args.batch_size,
     )
+    
+    # Save results
+    for i, df in enumerate(result_dfs):
+        output_path = f"data/logits_results_{i}.csv"
+        df.to_csv(here(output_path), index=False)
+        print(f"Results saved to {output_path}")
