@@ -9,6 +9,7 @@ editor: source
 ```{r}
 library(tidyverse)
 library(here)
+library(jsonlite)
 
 human_data <- read_csv(url("https://raw.githubusercontent.com/vboyce/tg-matcher/refs/heads/main/data/tgmatcheryoked-trials.csv"))
 ```
