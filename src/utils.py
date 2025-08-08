@@ -42,6 +42,23 @@ def preprocess_messages(row):
     Turn a row of the dataframe into a list of messages for the chat model.
     """
     chat_messages = []
+    message_history = row["message_history"]
+    if isinstance(message_history, str):
+        message_history = literal_eval(message_history.replace("nan", "''"))
+    else:
+        message_history = []
+
+    target_history = row["target_history"]
+    if isinstance(target_history, str):
+        target_history = literal_eval(row["target_history"])
+    else:
+        target_history = []
+
+    for messages, target in zip(message_history, target_history):
+        user_message = get_user_message(messages)
+        chat_messages.append({"role": "user", "content": user_message})
+        chat_messages.append({"role": "assistant", "content": target})
+
     this_trial_messages = row["message"]
     if not isinstance(this_trial_messages, str):
         chat_messages.append({"role": "user", "content": "describer: \n"})
@@ -65,29 +82,6 @@ def get_sgl_chat_template(model_name):
 
 
 def get_logprobs_from_outputs(outputs, choice_tokens, choice_token_ids):
-    """
-    Get the log probabilities of the choice tokens from the model outputs.
-    """
-    all_choice_logprobs = []
-    for output in outputs:
-        logprobs = output["meta_info"]["output_top_logprobs"][0]
-        choice_logprobs = {}
-        all_choice_logprobs.append(choice_logprobs)
-        for logprob, token_id, _ in logprobs:
-            if token_id in choice_token_ids:
-                choice_logprobs[choice_tokens[choice_token_ids.index(token_id)]] = (
-                    logprob
-                )
-
-            if len(choice_logprobs) == len(choice_tokens):
-                break
-        if len(choice_logprobs) < len(choice_tokens):
-            warnings.warn("Not all choice tokens found in top logprobs.")
-
-    return all_choice_logprobs
-
-
-def get_logprobs_from_outputs_vllm(outputs, choice_tokens, choice_token_ids):
     """
     Get the log probabilities of the choice tokens from the model outputs.
     """

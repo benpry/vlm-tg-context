@@ -4,19 +4,17 @@ Code for calling the language model to get choice logits
 
 from typing import Optional
 
-import nest_asyncio
 import pandas as pd
-import sglang as sgl
+import torch
 from PIL import Image
 from tqdm import tqdm
 from transformers import AutoProcessor
+from vllm import LLM, SamplingParams
 
 from src.utils import (
-    get_logprobs_from_outputs_vllm,
+    get_logprobs_from_outputs,
     preprocess_messages,
 )
-
-nest_asyncio.apply()
 
 SYSTEM_PROMPT = """You will be presented with a list of messages between people playing a reference game, where the describer has to get the matcher to choose an image from a list of images. Your goal is to guess which of the images the describer is trying to get the matcher to choose. The images, with their labels, are shown in the image.
 ForCausalLM
@@ -49,7 +47,7 @@ def get_logits(
     row_indices = []  # Track which row within each df
 
     llm = None  # load the language model lazily
-    sampling_params = {"max_new_tokens": 1}
+    sampling_params = SamplingParams(max_tokens=1, logprobs=100)
 
     if n_trials is not None:
         df = df.head(n_trials)
@@ -72,56 +70,34 @@ def get_logits(
 
     # Apply chat template to all messages
     print("Applying chat templates...")
-    all_texts = []
+    all_prompts = []
     for messages in tqdm(all_messages):
         text = processor.apply_chat_template(
             messages, add_generation_prompt=True, tokenize=False
         )
-        all_texts.append(text)
+        all_prompts.append({"prompt": text, "multi_modal_data": {"image": grid_image}})
 
     print("Doing inference...")
     if llm is None:
-        llm = sgl.Engine(
-            model_path=model_name,
-            device="cuda",
-            dtype="bfloat16",
-            cuda_graph_max_bs=8,
-            context_length=4096,
-            pp_size=1,
-            tp_size=1,
-            trust_remote_code=True,
+        llm = LLM(
+            model=model_name,
+            dtype=torch.bfloat16,
+            tensor_parallel_size=2,
+            max_model_len=8192,
+            max_num_seqs=5,
+            max_logprobs=100,
         )
 
-        # Test if it's working
-        print("Model loaded successfully!")
-        print(f"Model: {llm}")
-
-        # Try a simple generation
-        response = llm.generate("Hello, world!", sampling_params={"max_new_tokens": 10})
-        print(f"Response: {response}")
-
     outputs = llm.generate(
-        all_texts,
-        sampling_params,
-        image_data=[grid_image] * len(all_texts),
-        return_logprob=True,
-        top_logprobs_num=1000,
+        all_prompts,
+        sampling_params=sampling_params,
+        use_tqdm=True,
     )
 
-    all_choice_logprobs = get_logprobs_from_outputs_vllm(
-        outputs, CHOICES, choice_token_ids
-    )
+    print("finished inference, getting logprobs...")
+
+    all_choice_logprobs = get_logprobs_from_outputs(outputs, CHOICES, choice_token_ids)
 
     df["model_logprobs"] = all_choice_logprobs
 
-    return df[
-        [
-            "trial_id",
-            "stage_num",
-            "rep_num",
-            "trial_num",
-            "chat_prompt",
-            "model_logprobs",
-            "target",
-        ]
-    ]
+    return df.drop(columns=["chat_prompt"])

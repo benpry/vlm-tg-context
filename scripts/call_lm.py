@@ -7,7 +7,7 @@ from PIL import Image
 from pyprojroot import here
 
 # from src.lm import get_logits
-from src.lm_vllm import get_logits
+from src.lm import get_logits
 
 if __name__ == "__main__":
     parser = ArgumentParser()
@@ -50,7 +50,7 @@ if __name__ == "__main__":
     for filepath, df in zip(data_filepaths, dfs):
         output_path = filepath.replace(
             ".csv", f"_{args.model_name.split('/')[-1]}_logprobs.csv"
-        )
+        ).replace("context_prep", "data/logprobs")
         if os.path.exists(output_path):
             print(f"Skipping {filepath} as output file already exists.")
             continue
@@ -64,4 +64,4 @@ if __name__ == "__main__":
             batch_size=args.batch_size,
         )
 
-        df.to_csv(here(output_path), index=False)
+        df_results.to_csv(here(output_path), index=False)
