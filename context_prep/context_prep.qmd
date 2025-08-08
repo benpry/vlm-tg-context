@@ -8,6 +8,7 @@ editor: source
 
 ```{r}
 library(tidyverse)
+library(here)
 
 human_data <- read_csv(url("https://raw.githubusercontent.com/vboyce/tg-matcher/refs/heads/main/data/tgmatcheryoked-trials.csv"))
 ```
@@ -20,19 +21,15 @@ human_selections <- human_data |>
     workerid, correct, correct_tangram, condition,
     gameId, selected, trial_index, type, orig_trialNum, orig_repNum
   ) |>
-  mutate(workerid = as.factor(workerid)) |>
-  mutate(
-    matcher_trialNum = (trial_index - 3) %/% 3,
-    matcher_repNum = matcher_trialNum %/% 12
-  ) |>
-  mutate(workerid = ifelse(workerid == "3157" & condition == "yoked", "3157a", workerid)) |> # somehow two participants were assigned to 3157 -- but each set looks complete?
-  filter(workerid != "141") |>
-  filter(workerid != "35") |> # exclude two participants who didn't finish
+  mutate(workerid = as.factor(workerid),
+         matcher_trialNum = (trial_index - 3) %/% 3,
+         matcher_repNum = matcher_trialNum %/% 12,
+         workerid = ifelse(workerid == "3157" & condition == "yoked", "3157a", workerid)) |> # somehow two participants were assigned to 3157 -- but each set looks complete?
+  filter(workerid != "141", workerid != "35") |> # exclude two participants who didn't finish
   select(-trial_index)
 ```
 
 # Reconstruct trials
-
 
 ```{r}
 choose <- c(
@@ -41,7 +38,8 @@ choose <- c(
   "BTbGhXZvjdSFubTBg", "22dyGMRgestp8u5Lc"
 )
 
-original_chat <- read_csv(url("https://raw.githubusercontent.com/vboyce/tg-matcher/refs/heads/main/expt_prep_code/combined_chat.csv")) |> filter(gameId %in% choose)
+original_chat <- read_csv(url("https://raw.githubusercontent.com/vboyce/tg-matcher/refs/heads/main/expt_prep_code/combined_chat.csv")) |> 
+  filter(gameId %in% choose)
 ```
 
 ```{r}
@@ -51,13 +49,166 @@ nested <- original_chat |>
       role == "speaker" ~ "describer",
       role == "listener" ~ "matcher"
     ),
-    playerCount = ifelse(is.na(activePlayerCount), numPlayers, activePlayerCount),
+    playerCount = coalesce(activePlayerCount, numPlayers),
     original_pct_correct = realCorrect / (playerCount - 1)
   ) |>
   select(gameId, trialNum, repNum, tangram, role, text, original_pct_correct) |>
   group_by(gameId, trialNum, repNum, tangram, original_pct_correct) |>
   mutate(message_number = row_number()) |>
-  nest(messages = c(role, text, message_number))
+  nest(messages = c(role, text, message_number)) |> 
+  ungroup()
+```
+
+# Generate conditions
+
+## Yoked
+```{r}
+yoked_cumul <- nested |> 
+  select(gameId, trialNum) |> 
+  left_join(nested |> select(gameId, msg_trial_num = trialNum, messages, tangram), 
+            by = join_by(gameId, trialNum > msg_trial_num)) |> 
+  group_by(gameId, trialNum) |> 
+  summarise(message_history = messages |> toJSON(),
+            target_history = tangram |> toJSON(),
+            .groups = "drop") |> 
+  mutate(message_history = ifelse(message_history == "[{}]", "[]", message_history),
+         target_history = ifelse(target_history == "[null]", "[]", target_history))
+yoked <- nested |> 
+  left_join(yoked_cumul, by = join_by(gameId, trialNum)) |> 
+  mutate(message = map_vec(messages, toJSON),
+         condition = "yoked") |> 
+  rename(target = tangram) |> 
+  select(-messages)
+write_csv(yoked, here("context_prep", "yoked.csv"))
+```
+
+## Shuffled
+```{r}
+shuffled_msg <- human_selections |> 
+  filter(condition == "shuffled") |> 
+  left_join(nested, 
+            by = c("gameId", "orig_trialNum" = "trialNum", "orig_repNum" = "repNum"))
+shuffled_cumul <- shuffled_msg |> 
+  select(workerid, gameId, matcher_trialNum) |> 
+  left_join(shuffled_msg |> select(workerid, gameId, msg_trialnum = matcher_trialNum, messages, tangram),
+            by = join_by(workerid, gameId, matcher_trialNum > msg_trialnum)) |> 
+  group_by(workerid, gameId, matcher_trialNum) |> 
+  summarise(message_history = messages |> toJSON(),
+            target_history = tangram |> toJSON(),
+            .groups = "drop") |> 
+  mutate(message_history = ifelse(message_history == "[{}]", "[]", message_history),
+         target_history = ifelse(target_history == "[null]", "[]", target_history))
+shuffled <- shuffled_msg |> 
+  left_join(shuffled_cumul, by = join_by(workerid, gameId, matcher_trialNum)) |> 
+  mutate(message = map_vec(messages, toJSON),
+         condition = "shuffled") |> 
+  rename(target = tangram) |> 
+  select(-messages, -correct_tangram, -type)
+write_csv(shuffled, here("context_prep", "shuffled.csv"))
+```
+
+## Backward
+```{r}
+backward_nested <- nested |> 
+  mutate(trialNum = 71 - trialNum,
+         repNum = 5 - repNum) |> 
+  arrange(gameId, trialNum)
+backward_cumul <- backward_nested |>
+  select(gameId, trialNum) |> 
+  left_join(backward_nested |> select(gameId, msg_trial_num = trialNum, messages, tangram), 
+            by = join_by(gameId, trialNum > msg_trial_num)) |> 
+  group_by(gameId, trialNum) |> 
+  summarise(message_history = messages |> toJSON(),
+            target_history = tangram |> toJSON(),
+            .groups = "drop") |> 
+  mutate(message_history = ifelse(message_history == "[{}]", "[]", message_history),
+         target_history = ifelse(target_history == "[null]", "[]", target_history))
+backward <- backward_nested |> 
+  left_join(backward_cumul, by = join_by(gameId, trialNum)) |> 
+  mutate(message = map_vec(messages, toJSON),
+         condition = "backward") |> 
+  rename(target = tangram) |> 
+  select(-messages)
+write_csv(backward, here("context_prep", "backward.csv"))
+```
+
+## Ablated
+```{r}
+ablated_cumul <- nested |> 
+  select(gameId, trialNum, cur_tangram = tangram) |> 
+  left_join(nested |> select(gameId, msg_trial_num = trialNum, messages, tangram), 
+            by = join_by(gameId, trialNum > msg_trial_num)) |> 
+  filter(cur_tangram != tangram) |> 
+  group_by(gameId, trialNum) |> 
+  summarise(message_history = messages |> toJSON(),
+            target_history = tangram |> toJSON(),
+            .groups = "drop") |> 
+  mutate(message_history = ifelse(message_history == "[{}]", "[]", message_history),
+         target_history = ifelse(target_history == "[null]", "[]", target_history))
+ablated <- nested |> 
+  left_join(ablated_cumul, by = join_by(gameId, trialNum)) |> 
+  mutate(message = map_vec(messages, toJSON),
+         condition = "ablated") |> 
+  rename(target = tangram) |> 
+  select(-messages)
+write_csv(ablated, here("context_prep", "ablated.csv"))
+```
+
+## Wrong-within
+```{r}
+wrong_within_nested <- nested |> 
+  select(gameId, trialNum, repNum, tangram) |> 
+  left_join(nested |> select(gameId, repNum, messages, tangram), 
+            by = join_by(repNum, tangram),
+            relationship = "many-to-many") |> 
+  filter(gameId.x != gameId.y)
+  
+wrong_within_cumul <- wrong_within_nested |> 
+  select(gameId.x, gameId.y, trialNum) |> 
+  left_join(wrong_within_nested |> 
+            select(gameId.x, gameId.y, msg_trial_num = trialNum, messages, tangram), 
+            by = join_by(gameId.x, gameId.y, trialNum > msg_trial_num)) |> 
+  group_by(gameId.x, gameId.y, trialNum) |>
+  summarise(message_history = messages |> toJSON(),
+            target_history = tangram |> toJSON(),
+            .groups = "drop") |>
+  mutate(message_history = ifelse(message_history == "[{}]", "[]", message_history),
+         target_history = ifelse(target_history == "[null]", "[]", target_history))
+
+wrong_within <- nested |> 
+  left_join(wrong_within_cumul, by = join_by(gameId == gameId.x, trialNum)) |>
+  mutate(message = map_vec(messages, toJSON),
+         condition = "wrong_within") |> 
+  rename(target = tangram) |> 
+  select(-messages)
+write_csv(wrong_within, here("context_prep", "wrong_within.csv"))
+```
+
+## Wrong-across
+```{r}
+wrong_across_nested <- wrong_within_nested |> 
+  group_by(gameId.x, trialNum) |> 
+  mutate(gameId.y = sample(gameId.y))
+
+wrong_across_cumul <- wrong_across_nested |> 
+  select(gameId.x, gameId.y, trialNum) |> 
+  left_join(wrong_across_nested |> 
+            select(gameId.x, gameId.y, msg_trial_num = trialNum, messages, tangram), 
+            by = join_by(gameId.x, gameId.y, trialNum > msg_trial_num)) |> 
+  group_by(gameId.x, gameId.y, trialNum) |>
+  summarise(message_history = messages |> toJSON(),
+            target_history = tangram |> toJSON(),
+            .groups = "drop") |>
+  mutate(message_history = ifelse(message_history == "[{}]", "[]", message_history),
+         target_history = ifelse(target_history == "[null]", "[]", target_history))
+
+wrong_across <- nested |> 
+  left_join(wrong_across_cumul, by = join_by(gameId == gameId.x, trialNum)) |>
+  mutate(message = map_vec(messages, toJSON),
+         condition = "wrong_across") |> 
+  rename(target = tangram) |> 
+  select(-messages)
+write_csv(wrong_across, here("context_prep", "wrong_across.csv"))
 ```
 
 

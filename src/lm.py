@@ -49,7 +49,7 @@ def get_logits(
     # )
 
     sgl_template = get_sgl_chat_template(model_name)
-    llm = sgl.Engine(model_path=model_name, device="cuda", dtype="bfloat16", cuda_graph_max_bs=16, pp_size=1, tp_size=4, trust_remote_code=True)
+    llm = sgl.Engine(model_path=model_name, device="cuda", dtype="bfloat16", cuda_graph_max_bs=32, pp_size=1, tp_size=4, trust_remote_code=True)
     sampling_params = {"max_new_tokens": 1}
 
     # Collect all messages from all dataframes first
