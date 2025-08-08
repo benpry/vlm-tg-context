@@ -12,12 +12,12 @@ from transformers import AutoProcessor
 from vllm import LLM, SamplingParams
 
 from src.utils import (
+    get_image_token,
     get_logprobs_from_outputs,
     preprocess_messages,
 )
 
 SYSTEM_PROMPT = """You will be presented with a list of messages between people playing a reference game, where the describer has to get the matcher to choose an image from a list of images. Your goal is to guess which of the images the describer is trying to get the matcher to choose. The images, with their labels, are shown in the image.
-ForCausalLM
 Please answer with just the letter corresponding to the image you think the describer is trying to get the matcher to choose.
 """
 
@@ -33,21 +33,12 @@ def get_logits(
 ) -> list[pd.DataFrame]:
     processor = AutoProcessor.from_pretrained(model_name)
 
-    choice_token_ids = [
-        processor.tokenizer.encode(choice, add_special_tokens=False)[0]
-        for choice in CHOICES
-    ]
-
-    # model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-    #     model_name, torch_dtype=torch.bfloat16, device_map="auto", attn_implementation="kernels-community/flash-attn", trust_remote_code=True
-    # )
-
     # Collect all messages from all dataframes first
     all_messages = []
     row_indices = []  # Track which row within each df
 
     llm = None  # load the language model lazily
-    sampling_params = SamplingParams(max_tokens=1, logprobs=100)
+    sampling_params = SamplingParams(max_tokens=1, logprobs=1000, temperature=1)
 
     if n_trials is not None:
         df = df.head(n_trials)
@@ -58,10 +49,7 @@ def get_logits(
         messages = [
             {
                 "role": "system",
-                "content": [
-                    {"type": "text", "text": SYSTEM_PROMPT},
-                    {"type": "image", "image": grid_image},
-                ],
+                "content": SYSTEM_PROMPT + get_image_token(model_name),
             },
             *chat_prompt,
         ]
@@ -84,8 +72,8 @@ def get_logits(
             dtype=torch.bfloat16,
             tensor_parallel_size=2,
             max_model_len=8192,
-            max_num_seqs=5,
-            max_logprobs=100,
+            max_num_seqs=8,
+            max_logprobs=1000,
         )
 
     outputs = llm.generate(
@@ -96,7 +84,7 @@ def get_logits(
 
     print("finished inference, getting logprobs...")
 
-    all_choice_logprobs = get_logprobs_from_outputs(outputs, CHOICES, choice_token_ids)
+    all_choice_logprobs = get_logprobs_from_outputs(outputs, CHOICES)
 
     df["model_logprobs"] = all_choice_logprobs
 

@@ -35,6 +35,7 @@ if __name__ == "__main__":
         default=32,
         help="the batch size for processing (default: 32)",
     )
+    parser.add_argument("--overwrite", action="store_true")
 
     args = parser.parse_args()
 
@@ -51,7 +52,7 @@ if __name__ == "__main__":
         output_path = filepath.replace(
             ".csv", f"_{args.model_name.split('/')[-1]}_logprobs.csv"
         ).replace("context_prep", "data/logprobs")
-        if os.path.exists(output_path):
+        if os.path.exists(output_path) and not args.overwrite:
             print(f"Skipping {filepath} as output file already exists.")
             continue
 

@@ -15,7 +15,7 @@ def get_image_token(model_name):
     elif "idefics" in model_name:
         return "<image>"
     elif "Qwen" in model_name:
-        return "<|vision_bos|><|image_pad|><|vision_eos|>"
+        return "<|vision_start|><|image_pad|><|vision_end|>"
     else:
         raise ValueError(f"Model {model_name} not supported")
 
@@ -81,7 +81,7 @@ def get_sgl_chat_template(model_name):
         raise ValueError(f"Model {model_name} not supported")
 
 
-def get_logprobs_from_outputs(outputs, choice_tokens, choice_token_ids):
+def get_logprobs_from_outputs(outputs, choice_tokens):
     """
     Get the log probabilities of the choice tokens from the model outputs.
     """
