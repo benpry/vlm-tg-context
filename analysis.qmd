@@ -9,12 +9,10 @@ library(here)
 library(jsonlite)
 
 source(here("analysis_scripts", "logprobs.R"))
+source(here("analysis_scripts", "plot_helpers.R"))
 
 CONTEXT_LOC <- here("context_prep")
 OUTPUT_LOC <- here("context_prep")
-
-theme_set(theme_bw() +
-            theme(panel.grid = element_blank()))
 ```
 
 # Load data
@@ -42,13 +40,10 @@ human_selections <- human_data |>
 ```{r}
 yoked_human <- human_selections |> 
   filter(condition == "yoked") |>
-  group_by(gameId, condition, orig_trialNum, orig_repNum, target = correct_tangram) |>
+  group_by(gameId, condition, orig_trialNum, orig_repNum, 
+           matcher_trialNum, matcher_repNum, target = correct_tangram) |>
   summarise(accuracy = mean(correct),
             .groups = "drop") |> 
-  rename(
-    trialNum = orig_trialNum,
-    repNum = orig_repNum
-  ) |> 
   mutate(type = "human_naive")
 ```
 
@@ -56,8 +51,11 @@ yoked_human <- human_selections |>
 yoked_qwen <- read_csv(here(OUTPUT_LOC, "yoked_Qwen2.5-VL-32B-Instruct_logprobs.csv"))
 
 yoked_orig <- yoked_qwen |> 
-  select(gameId, condition, trialNum, repNum, target, accuracy = original_pct_correct) |> 
-  mutate(type = "human_original")
+  mutate(matcher_trialNum = trialNum,
+         matcher_repNum = repNum,
+         type = "human_original") |> 
+  select(gameId, condition, orig_trialNum = trialNum, orig_repNum = repNum, 
+         matcher_trialNum, matcher_repNum, target, accuracy = original_pct_correct, type)
 
 yoked_qwen_long <- yoked_qwen |> 
   logprobs_to_long() |> 
@@ -72,16 +70,32 @@ yoked_combined <- bind_rows(
 ```
 
 ```{r}
-ggplot(yoked_combined |> mutate(repNum = repNum + 1),
-       aes(x = repNum, y = accuracy, col = type)) +
-  geom_hline(yintercept = 1/12, lty = "dashed") +
-  geom_point(position = position_jitter(width = .2), alpha = .1) +
-  stat_summary(aes(group = interaction(gameId, type)), 
-               fun = mean, geom = "line", alpha = .2) +
-  # geom_line(aes(group = interaction(gameId, tangram, type)), alpha = .2) +
-  geom_smooth(method = "glm", formula = y ~ log(x)) +
-  scale_x_continuous(breaks = 1:6) +
-  labs(x = "Repetition number", y = "Accuracy", col = "Type")
+make_accuracy_plot(yoked_combined)
 ```
 
+## Shuffled
+```{r}
+shuffled_human <- human_selections |> 
+  filter(condition == "shuffled") |>
+  group_by(gameId, condition, orig_trialNum, orig_repNum, 
+           matcher_trialNum, matcher_repNum, target = correct_tangram) |>
+  summarise(accuracy = mean(correct),
+            .groups = "drop") |> 
+  mutate(type = "human_naive")
 
+shuffled_qwen <- read_csv(here(OUTPUT_LOC, "shuffled_Qwen2.5-VL-32B-Instruct_logprobs.csv"))
+
+shuffled_qwen_long <- shuffled_qwen |> 
+  logprobs_to_long() |> 
+  mutate(type = "model_qwen")
+
+shuffled_combined <- bind_rows(
+  shuffled_human,
+  shuffled_qwen_long
+) |> 
+  mutate(type = factor(type, levels = c("human_naive", "model_qwen")))
+```
+
+```{r}
+make_accuracy_plot(shuffled_combined)
+```

@@ -1,4 +1,14 @@
 logprobs_to_long <- function(logprobs) {
+  if (!"orig_trialNum" %in% colnames(logprobs)) {
+    logprobs <- logprobs |>
+      mutate(
+        orig_trialNum = trialNum,
+        orig_repNum = repNum,
+        matcher_trialNum = trialNum,
+        matcher_repNum = repNum
+      )
+  }
+
   logprobs_cleaned <- logprobs |>
     mutate(model_logprobs = map(model_logprobs, \(l) {
       l |>
@@ -18,7 +28,10 @@ logprobs_to_long <- function(logprobs) {
     rowwise() |>
     mutate(across(everything(), exp))
   logprobs_combined <- logprobs_cleaned |>
-    select(gameId, trialNum, repNum, target, condition) |>
+    select(
+      gameId, orig_trialNum, orig_repNum,
+      matcher_trialNum, matcher_repNum, target, condition
+    ) |>
     cbind(logprobs_res_out) |>
     pivot_longer(
       cols = c(A:L),
@@ -27,7 +40,10 @@ logprobs_to_long <- function(logprobs) {
     ) |>
     filter(target == tangram) |>
     rename(accuracy = logprob) |>
-    select(gameId, condition, trialNum, repNum, target, accuracy)
+    select(
+      gameId, condition, orig_trialNum, orig_repNum,
+      matcher_trialNum, matcher_repNum, target, accuracy
+    )
 
   logprobs_combined
 }
