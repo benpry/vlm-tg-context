@@ -6,7 +6,6 @@ import pandas as pd
 from PIL import Image
 from pyprojroot import here
 
-# from src.lm import get_logits
 from src.lm import get_logits
 
 if __name__ == "__main__":

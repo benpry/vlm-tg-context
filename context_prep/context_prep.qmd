@@ -83,6 +83,12 @@ yoked <- nested |>
 write_csv(yoked, here("context_prep", "yoked.csv"))
 ```
 
+```{r}
+no_context <- yoked |>
+  mutate(message_history = "[]")
+write_csv(no_context, here("context_prep", "no_context.csv"))
+```
+
 ## Shuffled
 ```{r}
 shuffled_msg <- human_selections |> 
