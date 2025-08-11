@@ -6,13 +6,18 @@ format: html
 ```{r}
 library(tidyverse)
 library(here)
+library(glue)
 library(jsonlite)
+library(patchwork)
+library(lme4)
+library(lmerTest)
+library(brms)
 
 source(here("analysis_scripts", "logprobs.R"))
 source(here("analysis_scripts", "plot_helpers.R"))
 
 CONTEXT_LOC <- here("context_prep")
-OUTPUT_LOC <- here("context_prep")
+OUTPUT_LOC <- here("data", "logprobs")
 ```
 
 # Load data
@@ -36,7 +41,39 @@ human_selections <- human_data |>
   select(-trial_index)
 ```
 
-## Yoked
+Original data
+```{r}
+choose <- c(
+  "Z2WAkYpWiXwuGcdME", "GWCD2NGoiA2n5Wh2i", "zviCQXNM4xWoYTmoY", "MEJ8y7jRW4947MPrH",
+  "x8BXJBHh3RxchPoHv", "rSMFkjhskBteiyQMB", "LzNv7CD7gRuxpk7cQ", "MDLyuv29jevaGLSeT",
+  "BTbGhXZvjdSFubTBg", "22dyGMRgestp8u5Lc"
+)
+
+original_chat <- read_csv(url("https://raw.githubusercontent.com/vboyce/tg-matcher/refs/heads/main/expt_prep_code/combined_chat.csv")) |> 
+  filter(gameId %in% choose)
+```
+## Reshape human data
+```{r}
+human_orig <- original_chat |>
+  mutate(
+    role = case_when(
+      role == "speaker" ~ "describer",
+      role == "listener" ~ "matcher"
+    ),
+    playerCount = coalesce(activePlayerCount, numPlayers),
+    accuracy = realCorrect / (playerCount - 1)
+  ) |>
+  mutate(
+    matcher_trialNum = trialNum,
+    matcher_repNum = repNum,
+    type = "human_original",
+    condition = "yoked"
+  ) |>
+  select(gameId, condition, orig_trialNum = trialNum, orig_repNum = repNum, 
+         matcher_trialNum, matcher_repNum, target = tangram, accuracy, type) |>
+  distinct()
+```
+
 ```{r}
 yoked_human <- human_selections |> 
   filter(condition == "yoked") |>
@@ -48,33 +85,6 @@ yoked_human <- human_selections |>
 ```
 
 ```{r}
-yoked_qwen <- read_csv(here(OUTPUT_LOC, "yoked_Qwen2.5-VL-32B-Instruct_logprobs.csv"))
-
-yoked_orig <- yoked_qwen |> 
-  mutate(matcher_trialNum = trialNum,
-         matcher_repNum = repNum,
-         type = "human_original") |> 
-  select(gameId, condition, orig_trialNum = trialNum, orig_repNum = repNum, 
-         matcher_trialNum, matcher_repNum, target, accuracy = original_pct_correct, type)
-
-yoked_qwen_long <- yoked_qwen |> 
-  logprobs_to_long() |> 
-  mutate(type = "model_qwen")
-
-yoked_combined <- bind_rows(
-  yoked_orig,
-  yoked_human,
-  yoked_qwen_long
-) |> 
-  mutate(type = factor(type, levels = c("human_original", "human_naive", "model_qwen")))
-```
-
-```{r}
-make_accuracy_plot(yoked_combined)
-```
-
-## Shuffled
-```{r}
 shuffled_human <- human_selections |> 
   filter(condition == "shuffled") |>
   group_by(gameId, condition, orig_trialNum, orig_repNum, 
@@ -82,20 +92,107 @@ shuffled_human <- human_selections |>
   summarise(accuracy = mean(correct),
             .groups = "drop") |> 
   mutate(type = "human_naive")
+```
 
-shuffled_qwen <- read_csv(here(OUTPUT_LOC, "shuffled_Qwen2.5-VL-32B-Instruct_logprobs.csv"))
+## Everything
+```{r}
+qwen_logprobs <- get_all_logprobs("Qwen2.5-VL-32B-Instruct")
+gemma_logprobs <- get_all_logprobs("gemma-3-27b-it")
+```
 
-shuffled_qwen_long <- shuffled_qwen |> 
-  logprobs_to_long() |> 
-  mutate(type = "model_qwen")
+Fix lengths
+```{r}
+human_orig_fixed <- human_orig |> 
+  cbind(qwen_logprobs |> 
+          filter(condition == "yoked") |> 
+          select(message_length, context_length))
+yoked_human_fixed <- yoked_human |> 
+  cbind(qwen_logprobs |> 
+          filter(condition == "yoked") |> 
+          select(message_length, context_length))
+shuffled_human_fixed <- human_selections |> 
+  filter(condition == "shuffled") |> 
+  cbind(qwen_logprobs |> 
+          filter(condition == "shuffled") |> 
+          select(message_length, context_length)) |>
+  group_by(gameId, condition, orig_trialNum, orig_repNum, 
+           matcher_trialNum, matcher_repNum, target = correct_tangram) |>
+  summarise(accuracy = mean(correct),
+            message_length = mean(message_length),
+            context_length = mean(context_length),
+            .groups = "drop") |> 
+  mutate(type = "human_naive")
+```
 
-shuffled_combined <- bind_rows(
-  shuffled_human,
-  shuffled_qwen_long
+
+```{r}
+full_combined <- bind_rows(
+  human_orig_fixed,
+  yoked_human_fixed,
+  shuffled_human_fixed,
+  qwen_logprobs,
+  gemma_logprobs
 ) |> 
-  mutate(type = factor(type, levels = c("human_naive", "model_qwen")))
+  mutate(type = factor(type, levels = c("human_original", "human_naive", "model_qwen", "model_gemma")),
+         condition = factor(condition, levels = c("yoked", "shuffled", "backward", 
+                                                  "ablated", "other-within", "other-across")))
 ```
 
 ```{r}
-make_accuracy_plot(shuffled_combined)
+p_matcher <- make_accuracy_plot(full_combined)
+p_original <- make_accuracy_plot(full_combined, repnum_type = "original")
 ```
+
+```{r}
+h_len <- full_combined |> 
+  filter(type == "model_qwen") |> 
+  ggplot(aes(x = context_length, fill = condition)) +
+  geom_density(alpha = .2) +
+  labs(x = "Context length", y = "Density", fill = "Condition")
+p_len <- full_combined |> 
+  filter(type == "model_qwen") |>
+  ggplot(aes(x = context_length, y = accuracy, col = condition)) +
+  geom_hline(yintercept = 1 / 12, lty = "dashed") +
+  geom_point(position = position_jitter(width = .2), alpha = .05) +
+  geom_smooth(method = "loess") +
+  labs(x = "Context length", y = "Accuracy", col = "Condition")
+
+p_full_len <- h_len / p_len +
+  plot_layout(
+    heights = c(1, 4),
+    guides = "collect",
+    axes = "collect") &
+  theme(legend.position = "bottom") &
+  guides(fill = "none")
+```
+
+# Modelling
+```{r}
+model_data <- full_combined |> 
+  filter(type != "human_original") |> 
+  left_join(full_combined |> 
+              filter(type == "human_original") |> 
+              rename(orig_acc = accuracy) |> 
+              select(-condition, -matcher_trialNum, -matcher_repNum, 
+                     -message_length, -context_length, -type),
+            by = join_by(gameId, orig_trialNum, orig_repNum, target)) |> 
+  mutate(
+    type = fct_drop(type),
+    across(c(type, condition), \(x) x |> `contrasts<-`(value = contr.sum(nlevels(x))))
+  )
+
+model <- lmer(
+  accuracy ~ type * condition * (poly(matcher_repNum, 5) + poly(orig_repNum, 5)) + 
+    message_length + context_length + orig_acc + (1 | gameId),
+  data = model_data,
+  # family = "gaussian",
+  # prior = c(
+  #   set_prior("normal(0, 1)", class = "b"),
+  #   set_prior("normal(0, 1)", class = "Intercept")
+  # ),
+  # iter = 4000, warmup = 2000, chains = 4, cores = 4
+)
+
+summary(model)
+```
+
