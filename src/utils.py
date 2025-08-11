@@ -1,8 +1,6 @@
 import warnings
 from ast import literal_eval
 
-from sglang.lang.chat_template import get_chat_template
-
 
 def get_image_token(model_name):
     """
@@ -69,16 +67,6 @@ def preprocess_messages(row):
         )
 
     return chat_messages
-
-
-def get_sgl_chat_template(model_name):
-    """
-    Get the chat template for a given model.
-    """
-    if "Qwen" in model_name:
-        return get_chat_template("qwen2-vl")
-    else:
-        raise ValueError(f"Model {model_name} not supported")
 
 
 def get_logprobs_from_outputs(outputs, choice_tokens):

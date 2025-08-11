@@ -5,7 +5,6 @@ Code for calling the language model to get choice logits
 from typing import Optional
 
 import pandas as pd
-import torch
 from PIL import Image
 from tqdm import tqdm
 from transformers import AutoProcessor
@@ -69,7 +68,7 @@ def get_logits(
     if llm is None:
         llm = LLM(
             model=model_name,
-            dtype=torch.bfloat16,
+            dtype="bfloat16",
             tensor_parallel_size=2,
             max_model_len=8192,
             max_num_seqs=8,
