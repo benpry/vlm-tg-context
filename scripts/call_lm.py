@@ -2,6 +2,7 @@ import os
 from argparse import ArgumentParser
 from glob import glob
 
+from vllm import LLM
 import pandas as pd
 from PIL import Image
 from pyprojroot import here
@@ -47,6 +48,18 @@ if __name__ == "__main__":
 
     grid_image = Image.open(here(args.grid_image_path))
 
+    llm = LLM(
+        model=args.model_name,
+        dtype="bfloat16",
+        tensor_parallel_size=2,
+        max_model_len=8192,
+        max_num_seqs=4,
+        limit_mm_per_prompt={"image": 1},
+        max_logprobs=1000,
+        trust_remote_code=True,
+        gpu_memory_utilization=0.95,
+    )
+
     for filepath, df in zip(data_filepaths, dfs):
         output_path = filepath.replace(
             ".csv", f"_{args.model_name.split('/')[-1]}_logprobs.csv"
@@ -59,6 +72,7 @@ if __name__ == "__main__":
         df_results = get_logits(
             df,
             args.model_name,
+            llm,
             grid_image,
             n_trials=args.n_trials,
             batch_size=args.batch_size,

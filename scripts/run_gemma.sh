@@ -15,8 +15,6 @@ source ~/.zshrc
 
 conda activate vtc
 
-export LD_LIBRARY_PATH="/scr/benpry/conda/envs/vtc/lib64:/scr/benpry/conda/envs/vtc/lib:$LD_LIBRARY_PATH"
-
 cd ~/vlm-tg-context
 
 MODEL_NAME="google/gemma-3-27b-it"

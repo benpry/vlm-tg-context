@@ -26,17 +26,17 @@ CHOICES = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"]
 def get_logits(
     df: pd.DataFrame,
     model_name: str,
+    llm: LLM,
     grid_image: Image.Image,
     n_trials: Optional[int] = None,
     batch_size: int = 8,
 ) -> list[pd.DataFrame]:
-    processor = AutoProcessor.from_pretrained(model_name)
+    processor = AutoProcessor.from_pretrained(model_name, trust_remote_code=True)
 
     # Collect all messages from all dataframes first
     all_messages = []
     row_indices = []  # Track which row within each df
 
-    llm = None  # load the language model lazily
     sampling_params = SamplingParams(max_tokens=1, logprobs=1000, temperature=1)
 
     if n_trials is not None:
@@ -65,16 +65,6 @@ def get_logits(
         all_prompts.append({"prompt": text, "multi_modal_data": {"image": grid_image}})
 
     print("Doing inference...")
-    if llm is None:
-        llm = LLM(
-            model=model_name,
-            dtype="bfloat16",
-            tensor_parallel_size=2,
-            max_model_len=8192,
-            max_num_seqs=8,
-            max_logprobs=1000,
-        )
-
     outputs = llm.generate(
         all_prompts,
         sampling_params=sampling_params,

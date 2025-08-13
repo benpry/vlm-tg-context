@@ -6,14 +6,15 @@ def get_image_token(model_name):
     """
     Get the image token for a given model.
     """
+    model_name = model_name.lower()
     if "gemma" in model_name:
         return "<start_of_image>"
     elif "llama" in model_name:
         return "<|image|>"
-    elif "idefics" in model_name:
-        return "<image>"
-    elif "Qwen" in model_name:
+    elif "qwen" in model_name:
         return "<|vision_start|><|image_pad|><|vision_end|>"
+    elif "kimi" in model_name:
+        return "<|media_start|>image<|media_content|><|media_pad|><|media_end|>"
     else:
         raise ValueError(f"Model {model_name} not supported")
 
