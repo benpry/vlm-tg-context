@@ -217,14 +217,13 @@ random_cumul <- random_msg |>
     random_msg |>
       select(
         workerid,
-        gameId,
         msg_trialnum = matcher_trialNum,
         messages,
         tangram
       ),
-    by = join_by(workerid, gameId, matcher_trialNum > msg_trialnum)
+    by = join_by(workerid, matcher_trialNum > msg_trialnum)
   ) |>
-  group_by(workerid, gameId, matcher_trialNum) |>
+  group_by(workerid, matcher_trialNum) |>
   summarise(
     message_history = messages |> toJSON(),
     target_history = tangram |> toJSON(),
@@ -235,7 +234,7 @@ random_cumul <- random_msg |>
     target_history = ifelse(target_history == "[null]", "[]", target_history)
   )
 random <- random_msg |>
-  left_join(random_cumul, by = join_by(workerid, gameId, matcher_trialNum)) |>
+  left_join(random_cumul, by = join_by(workerid, matcher_trialNum)) |>
   mutate(
     message = map_vec(messages, toJSON),
     condition = "random"
