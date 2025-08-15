@@ -7,12 +7,16 @@ editor: source
 # Get human data
 
 ```{r}
-libraryj(tidyverse)
+library(tidyverse)
 library(here)
 library(jsonlite)
 
 human_data <- read_csv(url(
   "https://raw.githubusercontent.com/vboyce/tg-matcher/refs/heads/main/data/tgmatcheryoked-trials.csv"
+))
+
+human_data_random <- read_csv(url(
+  "https://raw.githubusercontent.com/vboyce/tg-matcher/refs/heads/main/data/tgmatcher5.csv"
 ))
 ```
 
@@ -43,6 +47,38 @@ human_selections <- human_data |>
     )
   ) |> # somehow two participants were assigned to 3157 -- but each set looks complete?
   filter(workerid != "141", workerid != "35") |> # exclude two participants who didn't finish
+  select(-trial_index)
+```
+
+```{r}
+human_selections_2 <- human_data_random |>
+  mutate(row_num = row_number()) |>
+  mutate(workerid = case_when( # some error in id assignment so that two prolific id got the same assigment
+    workerid == 4969 & row_num > 15000 ~ "4969a",
+    workerid == 5003 & row_num > 15000 ~ "5003a",
+    T ~ as.character(workerid)
+  )) |>
+  select(-row_num) |>
+  filter(workerid != "4957") |>
+  filter(!is.na(correct_tangram)) |>
+  filter(type == "selection") |>
+  select(
+    workerid,
+    correct,
+    correct_tangram,
+    condition,
+    gameId,
+    selected,
+    trial_index,
+    type,
+    orig_trialNum,
+    orig_repNum
+  ) |>
+  mutate(
+    workerid = as.factor(workerid),
+    matcher_trialNum = (trial_index - 3) %/% 3,
+    matcher_repNum = matcher_trialNum %/% 12
+  ) |>
   select(-trial_index)
 ```
 
@@ -165,6 +201,48 @@ shuffled <- shuffled_msg |>
   rename(target = tangram) |>
   select(-messages, -correct_tangram, -type)
 write_csv(shuffled, here("context_prep", "shuffled.csv"))
+```
+
+## Random-human-order
+```{r}
+random_msg <- human_selections_2 |>
+  filter(condition == "random") |>
+  left_join(
+    nested,
+    by = c("gameId", "orig_trialNum" = "trialNum", "orig_repNum" = "repNum")
+  )
+random_cumul <- random_msg |>
+  select(workerid, gameId, matcher_trialNum) |>
+  left_join(
+    random_msg |>
+      select(
+        workerid,
+        gameId,
+        msg_trialnum = matcher_trialNum,
+        messages,
+        tangram
+      ),
+    by = join_by(workerid, gameId, matcher_trialNum > msg_trialnum)
+  ) |>
+  group_by(workerid, gameId, matcher_trialNum) |>
+  summarise(
+    message_history = messages |> toJSON(),
+    target_history = tangram |> toJSON(),
+    .groups = "drop"
+  ) |>
+  mutate(
+    message_history = ifelse(message_history == "[{}]", "[]", message_history),
+    target_history = ifelse(target_history == "[null]", "[]", target_history)
+  )
+random <- random_msg |>
+  left_join(random_cumul, by = join_by(workerid, gameId, matcher_trialNum)) |>
+  mutate(
+    message = map_vec(messages, toJSON),
+    condition = "random"
+  ) |>
+  rename(target = tangram) |>
+  select(-messages, -correct_tangram, -type)
+write_csv(random, here("context_prep", "random.csv"))
 ```
 
 ## Backward
