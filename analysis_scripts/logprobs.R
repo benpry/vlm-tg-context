@@ -59,9 +59,20 @@ logprobs_to_long <- function(logprobs) {
       across(everything(), \(x) x / sum(c_across(everything())))
     )
 
+  if ("gameId.y" %in% colnames(logprobs_cleaned)) {
+    logprobs_cleaned <- logprobs_cleaned |>
+      rename(runId = gameId.y)
+  } else if ("workerid" %in% colnames(logprobs_cleaned)) {
+    logprobs_cleaned <- logprobs_cleaned |>
+      mutate(runId = as.character(workerid))
+  } else {
+    logprobs_cleaned <- logprobs_cleaned |>
+      mutate(runId = "1")
+  }
+
   logprobs_combined <- logprobs_cleaned |>
     select(
-      gameId, orig_trialNum, orig_repNum,
+      gameId, runId, orig_trialNum, orig_repNum,
       matcher_trialNum, matcher_repNum, target, condition
     ) |>
     cbind(logprobs_res_out) |>
@@ -70,15 +81,16 @@ logprobs_to_long <- function(logprobs) {
       names_to = "tangram",
       values_to = "logprob"
     ) |>
-    filter(target == tangram) |>
-    rename(accuracy = logprob) |>
+    # filter(target == tangram) |>
+    rename(prob = logprob) |>
     select(
-      gameId, condition, orig_trialNum, orig_repNum,
-      matcher_trialNum, matcher_repNum, target, accuracy
+      gameId, runId, condition, orig_trialNum, orig_repNum,
+      matcher_trialNum, matcher_repNum, target,
+      selection = tangram, prob
     ) |>
     mutate(
-      message_length = logprobs_msglens,
-      context_length = logprobs_ctxlens
+      message_length = rep(logprobs_msglens, each = 12),
+      context_length = rep(logprobs_ctxlens, each = 12)
     )
 
   logprobs_combined
@@ -103,6 +115,9 @@ get_all_logprobs <- function(model_name) {
   other_across <- read_csv(here(OUTPUT_LOC, glue("wrong_across_{model_name}_logprobs.csv"))) |>
     logprobs_to_long() |>
     mutate(condition = "other-across")
+  no_context <- read_csv(here(OUTPUT_LOC, glue("no_context_{model_name}_logprobs.csv"))) |>
+    logprobs_to_long() |>
+    mutate(condition = "no context")
 
   bind_rows(
     yoked,
@@ -110,13 +125,58 @@ get_all_logprobs <- function(model_name) {
     backward,
     ablated,
     other_within,
-    other_across
+    other_across,
+    no_context
   ) |>
     mutate(
-      type = glue("model_{str_extract(model_name, '^[a-z]+') |> str_to_lower()}"),
+      type = glue("model_{model_name |> str_to_lower() |> str_extract('^[a-z]+')}"),
       condition = factor(condition, levels = c(
-        "yoked", "shuffled", "backward",
-        "ablated", "other-within", "other-across"
+        "yoked", "shuffled", "backward", "ablated",
+        "other-within", "other-across", "no context"
       ))
     )
+}
+
+filter_logprobs <- function(logprobs) {
+  logprobs |>
+    filter(target == selection) |>
+    rename(accuracy = prob) |>
+    select(-selection)
+}
+
+calculate_accuracies <- function(logprobs, join_only = FALSE) {
+  acc <- logprobs
+  prev_acc <- logprobs
+  if (!join_only) {
+    acc <- logprobs |>
+      filter_logprobs() |>
+      arrange(type, condition, gameId, runId, matcher_trialNum) |>
+      group_by(type, condition, gameId, runId, target) |>
+      mutate(target_repNum = ifelse(condition == "shuffled", 0:5, matcher_repNum))
+    prev_acc <- logprobs |>
+      group_by(
+        type, condition, gameId, runId, orig_trialNum, orig_repNum,
+        matcher_trialNum, matcher_repNum, target
+      ) |>
+      filter(prob == max(prob, na.rm = TRUE)) |>
+      summarise(
+        accuracy = max(selection == target, na.rm = TRUE),
+        .groups = "drop"
+      ) |>
+      arrange(type, condition, gameId, runId, matcher_trialNum) |>
+      group_by(type, condition, gameId, runId, target) |>
+      mutate(target_repNum = ifelse(condition == "shuffled", 0:5, matcher_repNum))
+  }
+
+  acc_next <- acc |>
+    left_join(
+      prev_acc |> mutate(target_repNum = target_repNum + 1) |>
+        select(type, gameId, runId, condition,
+          target_repNum, target,
+          prev_accuracy = accuracy
+        ),
+      by = join_by(type, gameId, runId, condition, target_repNum, target)
+    )
+
+  acc_next
 }

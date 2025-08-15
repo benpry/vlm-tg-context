@@ -209,3 +209,5 @@ __marimo__/
 
 
 slurm-output/
+.DS_Store
+.Rhistory
