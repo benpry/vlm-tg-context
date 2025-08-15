@@ -63,7 +63,10 @@ def get_logits(
         text = processor.apply_chat_template(
             messages, add_generation_prompt=True, tokenize=False
         )
-        all_prompts.append({"prompt": text, "multi_modal_data": {"image": grid_image}})
+        if include_image:
+            all_prompts.append({"prompt": text, "multi_modal_data": {"image": grid_image}})
+        else:
+            all_prompts.append({"prompt": text})
 
     print("Doing inference...")
     outputs = llm.generate(
