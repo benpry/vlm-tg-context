@@ -2,10 +2,13 @@ import warnings
 from ast import literal_eval
 
 
-def get_image_token(model_name):
+def get_image_token(model_name, include_image: bool = True):
     """
     Get the image token for a given model.
     """
+    if not include_image:
+        return ""
+
     model_name = model_name.lower()
     if "gemma" in model_name:
         return "<start_of_image>"

@@ -20,4 +20,5 @@ cd ~/vlm-tg-context
 MODEL_NAME="google/gemma-3-27b-it"
 
 python scripts/call_lm.py \
-    --model $MODEL_NAME
+    --model $MODEL_NAME \
+    --no_image

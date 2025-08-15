@@ -20,4 +20,5 @@ cd ~/vlm-tg-context
 MODEL_NAME="Qwen/Qwen2.5-VL-32B-Instruct"
 
 python scripts/call_lm.py \
-    --model $MODEL_NAME
+    --model $MODEL_NAME \
+    --no_image

@@ -20,4 +20,5 @@ cd ~/vlm-tg-context
 MODEL_NAME="moonshotai/Kimi-VL-A3B-Instruct"
 
 python scripts/call_lm.py \
-    --model $MODEL_NAME
+    --model $MODEL_NAME \
+    --no_image

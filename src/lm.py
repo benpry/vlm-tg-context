@@ -28,6 +28,7 @@ def get_logits(
     model_name: str,
     llm: LLM,
     grid_image: Image.Image,
+    include_image: bool = True,
     n_trials: Optional[int] = None,
     batch_size: int = 8,
 ) -> list[pd.DataFrame]:
@@ -48,7 +49,7 @@ def get_logits(
         messages = [
             {
                 "role": "system",
-                "content": SYSTEM_PROMPT + get_image_token(model_name),
+                "content": SYSTEM_PROMPT + get_image_token(model_name, include_image),
             },
             *chat_prompt,
         ]

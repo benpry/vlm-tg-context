@@ -20,4 +20,5 @@ cd ~/vlm-tg-context
 MODEL_NAME="meta-llama/Llama-3.2-11B-Vision-Instruct"
 
 python scripts/call_lm.py \
-    --model $MODEL_NAME
+    --model $MODEL_NAME \
+    --no_image
