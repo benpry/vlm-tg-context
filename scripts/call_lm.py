@@ -36,6 +36,7 @@ if __name__ == "__main__":
         help="the batch size for processing (default: 32)",
     )
     parser.add_argument("--no_image", action="store_true")
+    parser.add_argument("--float32", action="store_true")
     parser.add_argument("--overwrite", action="store_true")
 
     args = parser.parse_args()
@@ -51,7 +52,7 @@ if __name__ == "__main__":
 
     llm = LLM(
         model=args.model_name,
-        dtype="bfloat16",
+        dtype="float32" if args.float32 else "bfloat16",
         tensor_parallel_size=2,
         max_model_len=8192,
         max_num_seqs=4,
@@ -63,7 +64,7 @@ if __name__ == "__main__":
 
     for filepath, df in zip(data_filepaths, dfs):
         output_path = filepath.replace(
-            ".csv", f"_{args.model_name.split('/')[-1]}_logprobs_{'no_image' if args.no_image else 'with_image'}.csv"
+            ".csv", f"_{args.model_name.split('/')[-1]}_logprobs{'_no_image' if args.no_image else ''}{'_float32' if args.float32 else ''}.csv"
         ).replace("context_prep", "data/logprobs")
         if os.path.exists(output_path) and not args.overwrite:
             print(f"Skipping {filepath} as output file already exists.")
