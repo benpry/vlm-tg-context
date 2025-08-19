@@ -9,6 +9,12 @@ from pyprojroot import here
 
 from src.lm import get_logits
 
+def get_dtype(model_name: str, float32: bool) -> str:
+    if "kimi" in model_name.lower():
+        return "float16" if float32 else "bfloat16"
+    else:
+        return "float32" if float32 else "bfloat16"
+
 if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument(
@@ -52,13 +58,14 @@ if __name__ == "__main__":
 
     llm = LLM(
         model=args.model_name,
-        dtype="float32" if args.float32 else "bfloat16",
+        dtype=get_dtype(args.model_name, args.float32),
         tensor_parallel_size=2,
-        max_model_len=8192,
+        max_model_len=7000,
         max_num_seqs=4,
         limit_mm_per_prompt={"image": 1},
         max_logprobs=1000,
         trust_remote_code=True,
+        enforce_eager=args.float32,
         gpu_memory_utilization=0.95,
     )
 
