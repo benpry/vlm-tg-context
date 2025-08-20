@@ -60,7 +60,8 @@ condition_order <- c(
   "other-within", "other-across", "random", "no context"
 )
 
-make_accuracy_plot <- function(df, repnum_type = "matcher") {
+make_accuracy_plot <- function(df, repnum_type = "matcher",
+                               ref_level = 1 / 12) {
   p <- df |>
     mutate(
       repnum = if (repnum_type == "original") orig_repNum + 1 else matcher_repNum + 1,
@@ -68,7 +69,7 @@ make_accuracy_plot <- function(df, repnum_type = "matcher") {
       condition = factor(condition, levels = condition_order)
     ) |>
     ggplot(aes(x = repnum, y = accuracy, col = type)) +
-    geom_hline(yintercept = 1 / 12, lty = "dashed") +
+    geom_hline(yintercept = ref_level, lty = "dashed") +
     # geom_point(position = position_jitter(width = .2), alpha = .05) +
     # stat_summary(
     #   aes(group = interaction(gameId, type, trialnum)),

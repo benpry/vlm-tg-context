@@ -96,26 +96,30 @@ logprobs_to_long <- function(logprobs) {
   logprobs_combined
 }
 
-get_all_logprobs <- function(model_name) {
-  yoked <- read_csv(here(OUTPUT_LOC, glue("yoked_{model_name}_logprobs.csv"))) |>
+get_all_logprobs <- function(model_name, no_image = FALSE) {
+  noimgstr <- if (no_image) "_no_image" else ""
+  yoked <- read_csv(here(OUTPUT_LOC, glue("yoked_{model_name}_logprobs{noimgstr}.csv"))) |>
     logprobs_to_long()
-  shuffled <- read_csv(here(OUTPUT_LOC, glue("shuffled_{model_name}_logprobs.csv"))) |>
+  shuffled <- read_csv(here(OUTPUT_LOC, glue("shuffled_{model_name}_logprobs{noimgstr}.csv"))) |>
     logprobs_to_long()
-  backward <- read_csv(here(OUTPUT_LOC, glue("backward_{model_name}_logprobs.csv"))) |>
+  backward <- read_csv(here(OUTPUT_LOC, glue("backward_{model_name}_logprobs{noimgstr}.csv"))) |>
     logprobs_to_long() |>
     mutate(
       orig_trialNum = 71 - orig_trialNum,
       orig_repNum = 5 - orig_repNum
     )
-  ablated <- read_csv(here(OUTPUT_LOC, glue("ablated_{model_name}_logprobs.csv"))) |>
+  ablated <- read_csv(here(OUTPUT_LOC, glue("ablated_{model_name}_logprobs{noimgstr}.csv"))) |>
     logprobs_to_long()
-  other_within <- read_csv(here(OUTPUT_LOC, glue("wrong_within_{model_name}_logprobs.csv"))) |>
+  other_within <- read_csv(here(OUTPUT_LOC, glue("wrong_within_{model_name}_logprobs{noimgstr}.csv"))) |>
     logprobs_to_long() |>
     mutate(condition = "other-within")
-  other_across <- read_csv(here(OUTPUT_LOC, glue("wrong_across_{model_name}_logprobs.csv"))) |>
+  other_across <- read_csv(here(OUTPUT_LOC, glue("wrong_across_{model_name}_logprobs{noimgstr}.csv"))) |>
     logprobs_to_long() |>
     mutate(condition = "other-across")
-  no_context <- read_csv(here(OUTPUT_LOC, glue("no_context_{model_name}_logprobs.csv"))) |>
+  random <- read_csv(here(OUTPUT_LOC, glue("random_{model_name}_logprobs{noimgstr}.csv"))) |>
+    logprobs_to_long() |>
+    mutate(condition = "random")
+  no_context <- read_csv(here(OUTPUT_LOC, glue("no_context_{model_name}_logprobs{noimgstr}.csv"))) |>
     logprobs_to_long() |>
     mutate(condition = "no context")
 
@@ -126,13 +130,14 @@ get_all_logprobs <- function(model_name) {
     ablated,
     other_within,
     other_across,
+    random,
     no_context
   ) |>
     mutate(
       type = glue("model_{model_name |> str_to_lower() |> str_extract('^[a-z]+')}"),
       condition = factor(condition, levels = c(
         "yoked", "shuffled", "backward", "ablated",
-        "other-within", "other-across", "no context"
+        "other-within", "other-across", "random", "no context"
       ))
     )
 }
@@ -144,15 +149,26 @@ filter_logprobs <- function(logprobs) {
     select(-selection)
 }
 
+cast_random <- function(logprobs) {
+  logprobs |>
+    arrange(type, condition, runId, matcher_trialNum) |>
+    group_by(type, condition, runId) |>
+    mutate(gameId = ifelse(condition != "random", gameId,
+      gameId[1]
+    )) |> # arbitrary casting for plotting
+    ungroup()
+}
+
 calculate_accuracies <- function(logprobs, join_only = FALSE) {
   acc <- logprobs
   prev_acc <- logprobs
   if (!join_only) {
     acc <- logprobs |>
       filter_logprobs() |>
+      cast_random() |>
       arrange(type, condition, gameId, runId, matcher_trialNum) |>
       group_by(type, condition, gameId, runId, target) |>
-      mutate(target_repNum = ifelse(condition == "shuffled", 0:5, matcher_repNum))
+      mutate(target_repNum = ifelse(condition %in% c("shuffled", "random"), 0:5, matcher_repNum))
     prev_acc <- logprobs |>
       group_by(
         type, condition, gameId, runId, orig_trialNum, orig_repNum,
@@ -163,9 +179,10 @@ calculate_accuracies <- function(logprobs, join_only = FALSE) {
         accuracy = max(selection == target, na.rm = TRUE),
         .groups = "drop"
       ) |>
+      cast_random() |>
       arrange(type, condition, gameId, runId, matcher_trialNum) |>
       group_by(type, condition, gameId, runId, target) |>
-      mutate(target_repNum = ifelse(condition == "shuffled", 0:5, matcher_repNum))
+      mutate(target_repNum = ifelse(condition %in% c("shuffled", "random"), 0:5, matcher_repNum))
   }
 
   acc_next <- acc |>
