@@ -9,11 +9,14 @@ from pyprojroot import here
 
 from src.lm import get_logits
 
+
 def get_dtype(model_name: str, float32: bool) -> str:
     if "kimi" in model_name.lower():
+        # kimi won't work in float32
         return "float16" if float32 else "bfloat16"
     else:
         return "float32" if float32 else "bfloat16"
+
 
 if __name__ == "__main__":
     parser = ArgumentParser()
@@ -71,7 +74,8 @@ if __name__ == "__main__":
 
     for filepath, df in zip(data_filepaths, dfs):
         output_path = filepath.replace(
-            ".csv", f"_{args.model_name.split('/')[-1]}_logprobs{'_no_image' if args.no_image else ''}{'_float32' if args.float32 else ''}.csv"
+            ".csv",
+            f"_{args.model_name.split('/')[-1]}_logprobs{'_no_image' if args.no_image else ''}{'_float32' if args.float32 else ''}.csv",
         ).replace("context_prep", "data/logprobs")
         if os.path.exists(output_path) and not args.overwrite:
             print(f"Skipping {filepath} as output file already exists.")

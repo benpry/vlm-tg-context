@@ -11,12 +11,12 @@ from transformers import AutoProcessor
 from vllm import LLM, SamplingParams
 
 from src.utils import (
-    get_image_token,
+    get_messages,
     get_logprobs_from_outputs,
     preprocess_messages,
 )
 
-SYSTEM_PROMPT = """You will be presented with a list of messages between people playing a reference game, where the describer has to get the matcher to choose an image from a list of images. Your goal is to guess which of the images the describer is trying to get the matcher to choose. The images, with their labels, are shown in the image.
+SYSTEM_PROMPT = """You will be presented with a list of messages between people playing a reference game, where the describer has to get the matcher to choose a shape from a set of shapes. Your goal is to guess which of the shapes the describer is trying to get the matcher to choose. The shapes, with their labels, are shown in the image.
 Please answer with just the letter corresponding to the image you think the describer is trying to get the matcher to choose.
 """
 
@@ -46,13 +46,10 @@ def get_logits(
     df["chat_prompt"] = df.apply(preprocess_messages, axis=1)
 
     for row_idx, chat_prompt in enumerate(df["chat_prompt"]):
-        messages = [
-            {
-                "role": "system",
-                "content": SYSTEM_PROMPT + get_image_token(model_name, include_image),
-            },
-            *chat_prompt,
-        ]
+        messages = get_messages(
+            SYSTEM_PROMPT, chat_prompt, include_image, grid_image, model_name
+        )
+
         all_messages.append(messages)
         row_indices.append(row_idx)
 
@@ -63,8 +60,11 @@ def get_logits(
         text = processor.apply_chat_template(
             messages, add_generation_prompt=True, tokenize=False
         )
+
         if include_image:
-            all_prompts.append({"prompt": text, "multi_modal_data": {"image": grid_image}})
+            all_prompts.append(
+                {"prompt": text, "multi_modal_data": {"image": grid_image}}
+            )
         else:
             all_prompts.append({"prompt": text})
 

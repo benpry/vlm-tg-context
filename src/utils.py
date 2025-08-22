@@ -22,6 +22,49 @@ def get_image_token(model_name, include_image: bool = True):
         raise ValueError(f"Model {model_name} not supported")
 
 
+def get_messages(system_prompt, chat_prompt, include_image, grid_image, model_name):
+    messages = []
+    if "gemma" in model_name.lower():
+        # gemma models don't have a system role, so we add the instruction to the first user message
+        messages = [*chat_prompt]
+        if include_image:
+            messages[0]["content"] = [
+                {"type": "image", "image": grid_image},
+                {"type": "text", "text": f"{system_prompt}\n{messages[0]['content']}"},
+            ]
+        else:
+            messages[0]["content"] = f"{system_prompt}\n{messages[0]['content']}"
+    elif "llama" in model_name.lower():
+        # llama models don't take images in the system prompt, so we add the image to the first user message
+        messages = [
+            {"role": "system", "content": system_prompt},
+            *chat_prompt,
+        ]
+        messages[1]["content"] = [
+            {"type": "image", "image": grid_image},
+            {"type": "text", "text": messages[1]["content"]},
+        ]
+    else:
+        # otherwise the image goes in the system prompt
+        if include_image:
+            system_content = [
+                {"type": "image", "image": grid_image},
+                {"type": "text", "text": system_prompt},
+            ]
+        else:
+            system_content = system_prompt
+
+        messages = [
+            {
+                "role": "system",
+                "content": system_content,
+            },
+            *chat_prompt,
+        ]
+
+    return messages
+
+
 def get_user_message(messages):
     """
     Get the user message from a list of messages.

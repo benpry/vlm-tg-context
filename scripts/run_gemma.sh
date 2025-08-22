@@ -22,8 +22,6 @@ conda activate vtc
 
 MODEL_NAME="google/gemma-3-27b-it"
 
-export VLLM_ATTENTION_BACKEND="eager"
-
 python scripts/call_lm.py \
     --model $MODEL_NAME \
-    --float32
+    --overwrite
