@@ -499,21 +499,20 @@ random_msg <- human_selections_2 |>
     by = c("gameId", "orig_trialNum" = "trialNum", "orig_repNum" = "repNum")
   )
 random_cumul <- random_msg |>
-  select(workerid, gameId, matcher_trialNum) |>
+  select(workerid, matcher_trialNum) |>
   left_join(
     random_msg |>
       select(
         workerid,
-        gameId,
         msg_trialnum = matcher_trialNum,
         messages,
         selected,
         correct,
          tangram
       ),
-    by = join_by(workerid, gameId, matcher_trialNum > msg_trialnum)
+    by = join_by(workerid, matcher_trialNum > msg_trialnum)
   ) |>
-  group_by(workerid, gameId, matcher_trialNum) |>
+  group_by(workerid, matcher_trialNum) |>
   summarise(
     message_history = messages |> toJSON(),
     selection_history = selected |> toJSON(),
@@ -529,7 +528,7 @@ random_cumul <- random_msg |>
   )
 
 random <- random_msg |>
-  left_join(random_cumul, by = join_by(workerid, gameId, matcher_trialNum)) |>
+  left_join(random_cumul, by = join_by(workerid, matcher_trialNum)) |>
   mutate(
     message = map_vec(messages, toJSON),
     condition = "limited_feedback_random"
