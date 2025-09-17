@@ -83,7 +83,7 @@ if __name__ == "__main__":
     for filepath, df in zip(data_filepaths, dfs):
         output_path = filepath.replace(
             ".csv",
-            f"_{args.model_name.split('/')[-1]}_logprobs{'_no_image' if args.no_image else ''}{'_float32' if args.float32 else ''}.csv",
+            f"_{args.model_name.split('/')[-1]}_logprobs{'_no_image' if args.no_image else ''}{'_float32' if args.float32 else ''}{'_interactive' if args.interactive else ''}.csv",
         ).replace("context_prep", "data/logprobs")
         if os.path.exists(output_path) and not args.overwrite:
             print(f"Skipping {filepath} as output file already exists.")
@@ -109,4 +109,5 @@ if __name__ == "__main__":
                 n_trials=args.n_trials,
             )
 
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
         df_results.to_csv(here(output_path), index=False)

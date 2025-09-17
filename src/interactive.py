@@ -3,6 +3,7 @@ Code for the "interactive" version of the language model evaluation, where the m
 feedback on its own choices rather than human responses.
 """
 
+from ast import literal_eval
 from typing import Optional
 
 import pandas as pd
@@ -30,26 +31,24 @@ def get_logprobs_and_predictions(prompts, sampling_params, llm):
     return all_choice_logprobs, predictions
 
 
-def update_histories(df: pd.DataFrame, trial_num_abs: int):
-    if trial_num_abs == df["trialNum"].max():
+def update_histories(df: pd.DataFrame, trial_num: int):
+    if trial_num == df["trialNum"].max():
         return
 
-    df_nextround = df[df["trial_num_abs"] == trial_num_abs + 1].set_index("gameId")[
-        ["selection_history", "correctness_history", "target_history"]
+    df_nextround = df[df["trialNum"] == trial_num + 1][
+        ["gameId", "selection_history", "correctness_history", "target_history"]
     ]
-    df_thisround = df[df["trial_num_abs"] == trial_num_abs].set_index("gameId")[
-        "model_prediction"
-    ]
+    df_thisround = df[df["trialNum"] == trial_num][["gameId", "model_prediction"]]
 
     df_nextround = df_nextround.merge(df_thisround, on="gameId", how="left")
 
     # update the selection history
-    df_nextround["selection_history"] = df_nextround["selection_history"].apply(
+    df_nextround["selection_history"] = df_nextround.apply(
         lambda x: x["selection_history"] + [x["model_prediction"]],
         axis=1,
     )
     # update the correctness history
-    df_nextround["correctness_history"] = df_nextround["correctness_history"].apply(
+    df_nextround["correctness_history"] = df_nextround.apply(
         lambda x: x["correctness_history"]
         + [x["model_prediction"] == x["target_history"][-1]],
         axis=1,
@@ -100,6 +99,16 @@ def run_interactive_evaluation(
     if n_trials is not None:
         df = df.head(n_trials)
 
+    if "trialNum" not in df.columns:
+        df["trialNum"] = df["matcher_trialNum"]
+
+    df["selection_history"] = df["selection_history"].apply(
+        lambda x: literal_eval(x.replace("null", '"no response"'))
+    )
+    df["correctness_history"] = df["correctness_history"].apply(
+        lambda x: literal_eval(x.replace("true", "True").replace("false", "False"))
+    )
+
     for trial_num in range(df["trialNum"].max()):
         df_round = df[df["trialNum"] == trial_num]
 
@@ -118,4 +127,5 @@ def run_interactive_evaluation(
         # update the selection and correctness histories
         update_histories(df, trial_num)
 
+    return df
     return df
