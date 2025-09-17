@@ -104,13 +104,17 @@ def preprocess_messages(row):
 
     selection_history = row["selection_history"]
     if isinstance(selection_history, str):
-        selection_history = literal_eval(selection_history)
+        selection_history = literal_eval(
+            selection_history.replace("null", '"no response"')
+        )
     else:
         selection_history = []
 
     correctness_history = row["correctness_history"]
     if isinstance(correctness_history, str):
-        correctness_history = literal_eval(correctness_history)
+        correctness_history = literal_eval(
+            correctness_history.replace("true", "True").replace("false", "False")
+        )
     else:
         correctness_history = []
 

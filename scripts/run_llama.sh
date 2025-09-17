@@ -22,8 +22,6 @@ conda activate vtc
 
 MODEL_NAME="meta-llama/Llama-3.2-11B-Vision-Instruct"
 
-export VLLM_ATTENTION_BACKEND="eager"
-
 python scripts/call_lm.py \
     --model $MODEL_NAME \
-    --float32
+    --tensor_parallel_size 2

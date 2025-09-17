@@ -22,8 +22,6 @@ conda activate vtc
 
 MODEL_NAME="Qwen/Qwen2.5-VL-32B-Instruct"
 
-export VLLM_ATTENTION_BACKEND="eager"
-
 python scripts/call_lm.py \
     --model $MODEL_NAME \
-    --float32
+    --tensor_parallel_size 2

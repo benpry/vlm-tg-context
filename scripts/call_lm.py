@@ -28,6 +28,12 @@ if __name__ == "__main__":
         help="the name of the model to evaluate",
     )
     parser.add_argument(
+        "--data_dir",
+        type=str,
+        default="human_history",
+        help="the system prompt to use",
+    )
+    parser.add_argument(
         "--grid_image_path",
         type=str,
         default="data/compiled_grid.png",
@@ -39,6 +45,12 @@ if __name__ == "__main__":
         default=None,
         help="the number of trials to evaluate on (default: all)",
     )
+    parser.add_argument(
+        "--tensor_parallel_size",
+        type=int,
+        default=1,
+        help="the number of tensor parallel workers to use",
+    )
     parser.add_argument("--no_image", action="store_true")
     parser.add_argument("--float32", action="store_true")
     parser.add_argument("--overwrite", action="store_true")
@@ -46,7 +58,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    data_filepaths = glob(str(here("context_prep/*.csv")))
+    data_filepaths = glob(str(here(f"context_prep/{args.data_dir}/*.csv")))
     print("data filepaths:", data_filepaths)
 
     dfs = []
@@ -58,7 +70,7 @@ if __name__ == "__main__":
     llm = LLM(
         model=args.model_name,
         dtype=get_dtype(args.model_name, args.float32),
-        tensor_parallel_size=2,
+        tensor_parallel_size=args.tensor_parallel_size,
         max_model_len=7000,
         max_num_seqs=4,
         limit_mm_per_prompt={"image": 1},

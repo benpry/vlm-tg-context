@@ -24,4 +24,4 @@ MODEL_NAME="google/gemma-3-27b-it"
 
 python scripts/call_lm.py \
     --model $MODEL_NAME \
-    --overwrite
+    --tensor_parallel_size 2
