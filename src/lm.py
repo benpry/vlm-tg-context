@@ -10,14 +10,10 @@ from tqdm import tqdm
 from transformers import AutoProcessor
 from vllm import LLM, SamplingParams
 
-from src.utils import (
-    get_messages,
-    get_logprobs_from_outputs,
-    preprocess_messages,
-)
+from src.utils import get_logprobs_from_outputs, get_messages, preprocess_messages
 
 SYSTEM_PROMPT = """You will be presented with a list of messages between people playing a reference game, where the describer has to get the matcher to choose a shape from a set of shapes. Your goal is to guess which of the shapes the describer is trying to get the matcher to choose. The shapes, with their labels, are shown in the image.
-Please answer with just the letter corresponding to the image you think the describer is trying to get the matcher to choose.
+Please answer with just the letter corresponding to the image you think the describer is trying to get the matcher to choose. You will received feedback telling you whether your choice was correct or incorrect.
 """
 
 CHOICES = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"]
@@ -30,13 +26,11 @@ def get_logits(
     grid_image: Image.Image,
     include_image: bool = True,
     n_trials: Optional[int] = None,
-    batch_size: int = 8,
 ) -> list[pd.DataFrame]:
     processor = AutoProcessor.from_pretrained(model_name, trust_remote_code=True)
 
     # Collect all messages from all dataframes first
     all_messages = []
-    row_indices = []  # Track which row within each df
 
     sampling_params = SamplingParams(max_tokens=1, logprobs=1000, temperature=1)
 
@@ -45,13 +39,12 @@ def get_logits(
 
     df["chat_prompt"] = df.apply(preprocess_messages, axis=1)
 
-    for row_idx, chat_prompt in enumerate(df["chat_prompt"]):
+    for chat_prompt in df["chat_prompt"]:
         messages = get_messages(
             SYSTEM_PROMPT, chat_prompt, include_image, grid_image, model_name
         )
 
         all_messages.append(messages)
-        row_indices.append(row_idx)
 
     # Apply chat template to all messages
     print("Applying chat templates...")

@@ -2,11 +2,12 @@ import os
 from argparse import ArgumentParser
 from glob import glob
 
-from vllm import LLM
 import pandas as pd
 from PIL import Image
 from pyprojroot import here
+from vllm import LLM
 
+from src.interactive import run_interactive_evaluation
 from src.lm import get_logits
 
 
@@ -36,17 +37,12 @@ if __name__ == "__main__":
         "--n_trials",
         type=int,
         default=None,
-        help="the number of trials to evaluate (default: all)",
-    )
-    parser.add_argument(
-        "--batch_size",
-        type=int,
-        default=32,
-        help="the batch size for processing (default: 32)",
+        help="the number of trials to evaluate on (default: all)",
     )
     parser.add_argument("--no_image", action="store_true")
     parser.add_argument("--float32", action="store_true")
     parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument("--interactive", action="store_true")
 
     args = parser.parse_args()
 
@@ -82,14 +78,23 @@ if __name__ == "__main__":
             continue
 
         print(f"Processing {filepath}...")
-        df_results = get_logits(
-            df,
-            args.model_name,
-            llm,
-            grid_image,
-            include_image=not args.no_image,
-            n_trials=args.n_trials,
-            batch_size=args.batch_size,
-        )
+        if args.interactive:
+            df_results = run_interactive_evaluation(
+                df,
+                args.model_name,
+                llm,
+                grid_image,
+                include_image=not args.no_image,
+                n_trials=args.n_trials,
+            )
+        else:
+            df_results = get_logits(
+                df,
+                args.model_name,
+                llm,
+                grid_image,
+                include_image=not args.no_image,
+                n_trials=args.n_trials,
+            )
 
         df_results.to_csv(here(output_path), index=False)

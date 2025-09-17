@@ -82,6 +82,15 @@ def get_user_message(messages):
     return user_message
 
 
+def add_user_message(chat_messages: list, user_message: str):
+    if chat_messages and chat_messages[-1]["role"] == "user":
+        chat_messages[-1]["content"] += "\n\n" + user_message
+    else:
+        chat_messages.append({"role": "user", "content": user_message})
+
+    return chat_messages
+
+
 def preprocess_messages(row):
     """
     Turn a row of the dataframe into a list of messages for the chat model.
@@ -93,24 +102,35 @@ def preprocess_messages(row):
     else:
         message_history = []
 
-    target_history = row["target_history"]
-    if isinstance(target_history, str):
-        target_history = literal_eval(row["target_history"])
+    selection_history = row["selection_history"]
+    if isinstance(selection_history, str):
+        selection_history = literal_eval(selection_history)
     else:
-        target_history = []
+        selection_history = []
 
-    for messages, target in zip(message_history, target_history):
+    correctness_history = row["correctness_history"]
+    if isinstance(correctness_history, str):
+        correctness_history = literal_eval(correctness_history)
+    else:
+        correctness_history = []
+
+    for messages, selection, correctness in zip(
+        message_history, selection_history, correctness_history
+    ):
         user_message = get_user_message(messages)
-        chat_messages.append({"role": "user", "content": user_message})
-        chat_messages.append({"role": "assistant", "content": target})
+        chat_messages = add_user_message(chat_messages, user_message)
+        chat_messages.append({"role": "assistant", "content": selection})
+        chat_messages = add_user_message(
+            chat_messages, "Correct." if correctness else "Incorrect."
+        )
 
     this_trial_messages = row["message"]
     if not isinstance(this_trial_messages, str):
-        chat_messages.append({"role": "user", "content": "describer: \n"})
+        chat_messages = add_user_message(chat_messages, "describer: \n")
     else:
         this_trial_messages = literal_eval(this_trial_messages.replace("nan", "''"))
-        chat_messages.append(
-            {"role": "user", "content": get_user_message(this_trial_messages)}
+        chat_messages = add_user_message(
+            chat_messages, get_user_message(this_trial_messages)
         )
 
     return chat_messages
