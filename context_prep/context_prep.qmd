@@ -385,4 +385,209 @@ wrong_across <- nested |>
 write_csv(wrong_across, here("context_prep", "wrong_across.csv"))
 ```
 
+#Generate human-answer linked
 
+## Shuffled
+
+```{r}
+shuffled_msg <- human_selections |>
+  filter(condition == "shuffled") |>
+  left_join(
+    nested,
+    by = c("gameId", "orig_trialNum" = "trialNum", "orig_repNum" = "repNum")
+  )
+shuffled_cumul <- shuffled_msg |>
+  select(workerid, gameId, matcher_trialNum) |>
+  left_join(
+    shuffled_msg |>
+      select(
+        workerid,
+        gameId,
+        msg_trialnum = matcher_trialNum,
+        messages,
+        selected,
+        correct,
+         tangram
+      ),
+    by = join_by(workerid, gameId, matcher_trialNum > msg_trialnum)
+  ) |>
+  group_by(workerid, gameId, matcher_trialNum) |>
+  summarise(
+    message_history = messages |> toJSON(),
+    selection_history = selected |> toJSON(),
+    correctness_history = correct |> toJSON(),
+    target_history = tangram |> toJSON(),
+    .groups = "drop"
+  ) |>
+  mutate(
+    message_history = ifelse(message_history == "[{}]", "[]", message_history),
+    target_history = ifelse(target_history == "[null]", "[]", target_history),
+    selection_history = ifelse(selection_history == "[null]", "[]", selection_history),
+    correctness_history = ifelse(correctness_history == "[null]", "[]", correctness_history),
+  )
+
+shuffled <- shuffled_msg |>
+  left_join(shuffled_cumul, by = join_by(workerid, gameId, matcher_trialNum)) |>
+  mutate(
+    message = map_vec(messages, toJSON),
+    condition = "limited_feedback_shuffled"
+  ) |>
+  rename(target = tangram) |>
+  select(-messages, -correct_tangram, -type)
+
+write_csv(shuffled, here("context_prep", "human_history", "limited_feedback_shuffled.csv"))
+```
+
+## Yoked 
+
+```{r}
+yoked_msg <- human_selections |>
+  filter(condition == "yoked") |>
+  left_join(
+    nested,
+    by = c("gameId", "orig_trialNum" = "trialNum", "orig_repNum" = "repNum")
+  )
+yoked_cumul <- yoked_msg |>
+  select(workerid, gameId, matcher_trialNum) |>
+  left_join(
+    yoked_msg |>
+      select(
+        workerid,
+        gameId,
+        msg_trialnum = matcher_trialNum,
+        messages,
+        selected,
+        correct,
+         tangram
+      ),
+    by = join_by(workerid, gameId, matcher_trialNum > msg_trialnum)
+  ) |>
+  group_by(workerid, gameId, matcher_trialNum) |>
+  summarise(
+    message_history = messages |> toJSON(),
+    selection_history = selected |> toJSON(),
+    correctness_history = correct |> toJSON(),
+    target_history = tangram |> toJSON(),
+    .groups = "drop"
+  ) |>
+  mutate(
+    message_history = ifelse(message_history == "[{}]", "[]", message_history),
+    target_history = ifelse(target_history == "[null]", "[]", target_history),
+    selection_history = ifelse(selection_history == "[null]", "[]", selection_history),
+    correctness_history = ifelse(correctness_history == "[null]", "[]", correctness_history),
+  )
+
+yoked <- yoked_msg |>
+  left_join(yoked_cumul, by = join_by(workerid, gameId, matcher_trialNum)) |>
+  mutate(
+    message = map_vec(messages, toJSON),
+    condition = "limited_feedback_yoked"
+  ) |>
+  rename(target = tangram) |>
+  select(-messages, -correct_tangram, -type)
+
+write_csv(yoked, here("context_prep", "human_history", "limited_feedback_yoked.csv"))
+```
+
+## Random
+
+```{r}
+random_msg <- human_selections_2 |>
+  filter(condition == "random") |>
+  left_join(
+    nested,
+    by = c("gameId", "orig_trialNum" = "trialNum", "orig_repNum" = "repNum")
+  )
+random_cumul <- random_msg |>
+  select(workerid, gameId, matcher_trialNum) |>
+  left_join(
+    random_msg |>
+      select(
+        workerid,
+        gameId,
+        msg_trialnum = matcher_trialNum,
+        messages,
+        selected,
+        correct,
+         tangram
+      ),
+    by = join_by(workerid, gameId, matcher_trialNum > msg_trialnum)
+  ) |>
+  group_by(workerid, gameId, matcher_trialNum) |>
+  summarise(
+    message_history = messages |> toJSON(),
+    selection_history = selected |> toJSON(),
+    correctness_history = correct |> toJSON(),
+    target_history = tangram |> toJSON(),
+    .groups = "drop"
+  ) |>
+  mutate(
+    message_history = ifelse(message_history == "[{}]", "[]", message_history),
+    target_history = ifelse(target_history == "[null]", "[]", target_history),
+    selection_history = ifelse(selection_history == "[null]", "[]", selection_history),
+    correctness_history = ifelse(correctness_history == "[null]", "[]", correctness_history),
+  )
+
+random <- random_msg |>
+  left_join(random_cumul, by = join_by(workerid, gameId, matcher_trialNum)) |>
+  mutate(
+    message = map_vec(messages, toJSON),
+    condition = "limited_feedback_random"
+  ) |>
+  rename(target = tangram) |>
+  select(-messages, -correct_tangram, -type)
+
+write_csv(random, here("context_prep", "human_history", "limited_feedback_random.csv"))
+```
+
+## Backwards
+
+
+```{r}
+backwards_msg <- human_selections_2 |>
+  filter(condition == "backwards") |>
+  left_join(
+    nested,
+    by = c("gameId", "orig_trialNum" = "trialNum", "orig_repNum" = "repNum")
+  )
+backwards_cumul <- backwards_msg |>
+  select(workerid, gameId, matcher_trialNum) |>
+  left_join(
+    backwards_msg |>
+      select(
+        workerid,
+        gameId,
+        msg_trialnum = matcher_trialNum,
+        messages,
+        selected,
+        correct,
+         tangram
+      ),
+    by = join_by(workerid, gameId, matcher_trialNum > msg_trialnum)
+  ) |>
+  group_by(workerid, gameId, matcher_trialNum) |>
+  summarise(
+    message_history = messages |> toJSON(),
+    selection_history = selected |> toJSON(),
+    correctness_history = correct |> toJSON(),
+    target_history = tangram |> toJSON(),
+    .groups = "drop"
+  ) |>
+  mutate(
+    message_history = ifelse(message_history == "[{}]", "[]", message_history),
+    target_history = ifelse(target_history == "[null]", "[]", target_history),
+    selection_history = ifelse(selection_history == "[null]", "[]", selection_history),
+    correctness_history = ifelse(correctness_history == "[null]", "[]", correctness_history),
+  )
+
+backwards <- backwards_msg |>
+  left_join(backwards_cumul, by = join_by(workerid, gameId, matcher_trialNum)) |>
+  mutate(
+    message = map_vec(messages, toJSON),
+    condition = "limited_feedback_backwards"
+  ) |>
+  rename(target = tangram) |>
+  select(-messages, -correct_tangram, -type)
+
+write_csv(backwards, here("context_prep", "human_history", "limited_feedback_backwards.csv"))
+```
