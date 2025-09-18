@@ -24,14 +24,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model_name",
         type=str,
-        default="Qwen/Qwen2.5-VL-32B-Instruct",
         help="the name of the model to evaluate",
     )
     parser.add_argument(
         "--data_dir",
         type=str,
-        default="human_history",
-        help="the system prompt to use",
+        help="the directory to read data from",
     )
     parser.add_argument(
         "--grid_image_path",
@@ -83,8 +81,10 @@ if __name__ == "__main__":
     for filepath, df in zip(data_filepaths, dfs):
         output_path = filepath.replace(
             ".csv",
-            f"_{args.model_name.split('/')[-1]}_logprobs{'_no_image' if args.no_image else ''}{'_float32' if args.float32 else ''}{'_interactive' if args.interactive else ''}.csv",
+            f"_{args.model_name.split('/')[-1]}_logprobs{'_no_image' if args.no_image else ''}{'_float32' if args.float32 else ''}.csv",
         ).replace("context_prep", "data/logprobs")
+        if args.interactive:
+            output_path = output_path.replace(args.data_dir, "interactive")
         if os.path.exists(output_path) and not args.overwrite:
             print(f"Skipping {filepath} as output file already exists.")
             continue

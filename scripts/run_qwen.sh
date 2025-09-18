@@ -15,15 +15,12 @@ cd ~/vlm-tg-context
 
 # install conda if needed, create vtc environment if needed, activate vtc
 source scripts/set_up_conda.sh
-
-source ~/.zshrc
-cd ~/vlm-tg-context
 conda activate vtc
 
 MODEL_NAME="Qwen/Qwen2.5-VL-32B-Instruct"
 
 python scripts/call_lm.py \
-    --model $MODEL_NAME \
+    --model_name $MODEL_NAME \
     --tensor_parallel_size 2 \
-    --data_dir full_feedback
-
+    --data_dir full_feedback \
+    --interactive

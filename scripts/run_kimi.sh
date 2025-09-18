@@ -23,7 +23,11 @@ conda activate vtc
 MODEL_NAME="moonshotai/Kimi-VL-A3B-Instruct"
 
 python scripts/call_lm.py \
-    --model $MODEL_NAME \
+    --model_name $MODEL_NAME \
     --tensor_parallel_size 2 \
-    --data_dir full_feedback
+    --data_dir full_feedback \
+    --interactive \
+    --overwrite
+
+
 
