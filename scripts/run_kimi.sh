@@ -1,10 +1,10 @@
 #!/bin/zsh
 #SBATCH --account=cocoflops
-#SBATCH --partition=cocoflops,sc-loprio
+#SBATCH --partition=cocoflops
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:2
-#SBATCH --mem=64G
-#SBATCH --cpus-per-task=4
+#SBATCH --mem=32G
+#SBATCH --cpus-per-task=2
 #SBATCH --time=48:00:00
 #SBATCH --output=slurm-output/vtc_%j.out
 #SBATCH --error=slurm-output/vtc_%j.err
@@ -24,4 +24,6 @@ MODEL_NAME="moonshotai/Kimi-VL-A3B-Instruct"
 
 python scripts/call_lm.py \
     --model $MODEL_NAME \
-    --tensor_parallel_size 2
+    --tensor_parallel_size 2 \
+    --data_dir full_feedback
+

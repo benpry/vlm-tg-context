@@ -1,6 +1,6 @@
 #!/bin/zsh
 #SBATCH --account=cocoflops
-#SBATCH --partition=cocoflops,sc-loprio
+#SBATCH --partition=cocoflops
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:2
 #SBATCH --mem=64G
@@ -24,4 +24,5 @@ MODEL_NAME="meta-llama/Llama-3.2-11B-Vision-Instruct"
 
 python scripts/call_lm.py \
     --model $MODEL_NAME \
-    --tensor_parallel_size 2
+    --tensor_parallel_size 2 \
+    --data_dir full_feedback
