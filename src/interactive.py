@@ -115,7 +115,7 @@ def run_interactive_evaluation(
         lambda x: literal_eval(x.replace("true", "True").replace("false", "False"))
     )
 
-    for trial_num in range(df["trialNum"].max()):
+    for trial_num in range(df["trialNum"].max() + 1):
         df_round = df[df["trialNum"] == trial_num]
 
         prompts = prepare_round_prompts(
