@@ -12,6 +12,9 @@ logprobs_to_long <- function(logprobs) {
   logprobs_cleaned <- logprobs |>
     mutate(
       model_logprobs = map(model_logprobs, \(l) {
+        if (is.na(l)) {
+          return(NA)
+        }
         l |>
           str_replace_all("'", '"') |>
           fromJSON()
@@ -50,7 +53,8 @@ logprobs_to_long <- function(logprobs) {
         as_tibble()
     }) |>
     list_rbind() |>
-    unnest(cols = everything())
+    unnest(cols = everything()) |>
+    select(A, B, C, D, E, `F`, G, H, I, J, K, L)
   logprobs_res_out <- logprobs_res |>
     select(order(colnames(logprobs_res))) |>
     rowwise() |>
@@ -96,30 +100,30 @@ logprobs_to_long <- function(logprobs) {
   logprobs_combined
 }
 
-get_all_logprobs <- function(model_name, no_image = FALSE) {
-  noimgstr <- if (no_image) "_no_image" else ""
-  yoked <- read_csv(here(OUTPUT_LOC, glue("yoked_{model_name}_logprobs{noimgstr}.csv"))) |>
+get_all_logprobs <- function(model_name, no_image = FALSE, float32 = FALSE, prefix = "") {
+  modstr <- if (no_image) "_no_image" else if (float32) "_float32" else ""
+  yoked <- read_csv(here(OUTPUT_LOC, glue("{prefix}yoked_{model_name}_logprobs{modstr}.csv"))) |>
     logprobs_to_long()
-  shuffled <- read_csv(here(OUTPUT_LOC, glue("shuffled_{model_name}_logprobs{noimgstr}.csv"))) |>
+  shuffled <- read_csv(here(OUTPUT_LOC, glue("{prefix}shuffled_{model_name}_logprobs{modstr}.csv"))) |>
     logprobs_to_long()
-  backward <- read_csv(here(OUTPUT_LOC, glue("backward_{model_name}_logprobs{noimgstr}.csv"))) |>
+  backward <- read_csv(here(OUTPUT_LOC, glue("{prefix}backward_{model_name}_logprobs{modstr}.csv"))) |>
     logprobs_to_long() |>
     mutate(
       orig_trialNum = 71 - orig_trialNum,
       orig_repNum = 5 - orig_repNum
     )
-  ablated <- read_csv(here(OUTPUT_LOC, glue("ablated_{model_name}_logprobs{noimgstr}.csv"))) |>
+  ablated <- read_csv(here(OUTPUT_LOC, glue("{prefix}ablated_{model_name}_logprobs{modstr}.csv"))) |>
     logprobs_to_long()
-  other_within <- read_csv(here(OUTPUT_LOC, glue("wrong_within_{model_name}_logprobs{noimgstr}.csv"))) |>
+  other_within <- read_csv(here(OUTPUT_LOC, glue("{prefix}wrong_within_{model_name}_logprobs{modstr}.csv"))) |>
     logprobs_to_long() |>
     mutate(condition = "other-within")
-  other_across <- read_csv(here(OUTPUT_LOC, glue("wrong_across_{model_name}_logprobs{noimgstr}.csv"))) |>
+  other_across <- read_csv(here(OUTPUT_LOC, glue("{prefix}wrong_across_{model_name}_logprobs{modstr}.csv"))) |>
     logprobs_to_long() |>
     mutate(condition = "other-across")
-  random <- read_csv(here(OUTPUT_LOC, glue("random_{model_name}_logprobs{noimgstr}.csv"))) |>
+  random <- read_csv(here(OUTPUT_LOC, glue("{prefix}random_{model_name}_logprobs{modstr}.csv"))) |>
     logprobs_to_long() |>
     mutate(condition = "random")
-  no_context <- read_csv(here(OUTPUT_LOC, glue("no_context_{model_name}_logprobs{noimgstr}.csv"))) |>
+  no_context <- read_csv(here(OUTPUT_LOC, glue("{prefix}no_context_{model_name}_logprobs{modstr}.csv"))) |>
     logprobs_to_long() |>
     mutate(condition = "no context")
 

@@ -76,6 +76,7 @@ choose <- c(
 original_chat <- read_csv(url("https://raw.githubusercontent.com/vboyce/tg-matcher/refs/heads/main/expt_prep_code/combined_chat.csv")) |> 
   filter(gameId %in% choose)
 ```
+
 ## Reshape human data
 ```{r}
 human_orig <- original_chat |>
@@ -138,10 +139,10 @@ random_human <- human_selections_new |>
 
 ## Everything
 ```{r}
-qwen_logprobs_full <- get_all_logprobs("Qwen2.5-VL-32B-Instruct")
-gemma_logprobs_full <- get_all_logprobs("gemma-3-27b-it")
-llama_logprobs_full <- get_all_logprobs("Llama-3.2-11B-Vision-Instruct")
-kimi_logprobs_full <- get_all_logprobs("Kimi-VL-A3B-Instruct")
+qwen_logprobs_full <- get_all_logprobs("Qwen2.5-VL-32B-Instruct", prefix = "full_feedback/")
+gemma_logprobs_full <- get_all_logprobs("gemma-3-27b-it", prefix = "full_feedback/")
+llama_logprobs_full <- get_all_logprobs("Llama-3.2-11B-Vision-Instruct", prefix = "full_feedback/")
+kimi_logprobs_full <- get_all_logprobs("Kimi-VL-A3B-Instruct", prefix = "full_feedback/")
 
 qwen_logprobs <- filter_logprobs(qwen_logprobs_full)
 gemma_logprobs <- filter_logprobs(gemma_logprobs_full)
@@ -159,6 +160,18 @@ qwen_logprobs_ni <- filter_logprobs(qwen_logprobs_noimg)
 gemma_logprobs_ni <- filter_logprobs(gemma_logprobs_noimg)
 llama_logprobs_ni <- filter_logprobs(llama_logprobs_noimg)
 kimi_logprobs_ni <- filter_logprobs(kimi_logprobs_noimg)
+```
+
+```{r}
+qwen_logprobs_f32 <- get_all_logprobs("Qwen2.5-VL-32B-Instruct", float32 = TRUE)
+gemma_logprobs_f32 <- get_all_logprobs("gemma-3-27b-it", float32 = TRUE)
+llama_logprobs_f32 <- get_all_logprobs("Llama-3.2-11B-Vision-Instruct", float32 = TRUE)
+kimi_logprobs_f32 <- get_all_logprobs("Kimi-VL-A3B-Instruct", float32 = TRUE)
+
+qwen_logprobs_f <- filter_logprobs(qwen_logprobs_f32)
+gemma_logprobs_f <- filter_logprobs(gemma_logprobs_f32)
+llama_logprobs_f <- filter_logprobs(llama_logprobs_f32)
+kimi_logprobs_f <- filter_logprobs(kimi_logprobs_f32)
 ```
 
 
@@ -195,7 +208,7 @@ backward_human_fixed <- backward_human |>
           filter(condition == "backward") |> 
           select(message_length, context_length)) |> 
   mutate(runId = "1")
-random_msgs <- read_csv(here("context_prep", "random.csv")) |> 
+random_msgs <- read_csv(here("context_prep", "full_feedback", "random.csv")) |> 
   mutate(message = map(message, fromJSON),
          message_history = message_history |>
            replace_na("[]") |>
@@ -282,6 +295,31 @@ all_combined <- full_combined |>
   mutate(accuracy = no_image - image)
 ```
 
+```{r}
+f32_combined <- bind_rows(
+  qwen_logprobs_f,
+  gemma_logprobs_f,
+  llama_logprobs_f,
+  kimi_logprobs_f
+) |> 
+  mutate(type = factor(type, levels = c("human_original", "human_naive", "model_qwen", "model_gemma", 
+                                      "model_llama", "model_kimi")),
+         condition = factor(condition, levels = c("yoked", "shuffled", "backward", "ablated", 
+                                                  "other-within", "other-across", "random", "no context"))) |> 
+  arrange(type, condition, runId, matcher_trialNum) |>
+  group_by(type, condition, runId, target) |>
+  mutate(matcher_repNum = ifelse(condition %in% c("shuffled", "random"), 0:5, matcher_repNum)) |> 
+  ungroup()
+
+f32_comp <- full_combined |> 
+  mutate(f_type = "bf16") |> 
+  filter(str_starts(type, "model_")) |>
+  bind_rows(f32_combined |> mutate(f_type = "float32")) |>
+  pivot_wider(names_from = f_type, values_from = accuracy) |>
+  mutate(accuracy = float32 - bf16)
+```
+
+
 # Plots
 ## Big plot
 ```{r eval=F}
@@ -361,6 +399,13 @@ p_noimg_diff <- all_combined |>
   COL_SCALE_NOLIM +
   labs(y = "Accuracy difference (text-only − image–text)")
 ggsave(here("figs", "diff_plot.png"), p_noimg_diff, width = 9, height = 4.5)
+```
+
+```{r}
+p_f32_diff <- f32_comp |> 
+  make_accuracy_plot(ref_level = 0) +
+  COL_SCALE_NOLIM +
+  labs(y = "Accuracy difference (float32 − bf16)")
 ```
 
 
@@ -791,4 +836,21 @@ p_rsa <- mat_conf_rsa_long |>
 ggsave(here("figs", "rsa_plot.png"), p_rsa, width = 10, height = 3.3)
 ```
 
+# Limited feedback
+
+```{r}
+qwen_logprobs_full_lf_hh <- get_all_logprobs("Qwen2.5-VL-32B-Instruct", 
+                                             prefix = "human_history/limited_feedback_")
+gemma_logprobs_full_lf_hh <- get_all_logprobs("gemma-3-27b-it", 
+                                             prefix = "human_history/limited_feedback_")
+llama_logprobs_full_lf_hh <- get_all_logprobs("Llama-3.2-11B-Vision-Instruct", 
+                                             prefix = "human_history/limited_feedback_")
+kimi_logprobs_full_lf_hh <- get_all_logprobs("Kimi-VL-A3B-Instruct", 
+                                             prefix = "human_history/limited_feedback_")
+
+qwen_logprobs_lf_hh <- filter_logprobs(qwen_logprobs_full_lf_hh)
+gemma_logprobs_lf_hh <- filter_logprobs(gemma_logprobs_full_lf_hh)
+llama_logprobs_lf_hh <- filter_logprobs(llama_logprobs_full_lf_hh)
+kimi_logprobs_lf_hh <- filter_logprobs(kimi_logprobs_full_lf_hh)
+```
 
