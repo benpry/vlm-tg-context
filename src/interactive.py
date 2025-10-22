@@ -1,9 +1,8 @@
 """
-Code for the "interactive" version of the language model evaluation, where the model gets limited
+Code for the interactive version of the language model evaluation, where the model gets limited
 feedback on its own choices rather than human responses.
 """
 
-from ast import literal_eval
 from typing import Optional
 
 import pandas as pd
@@ -16,7 +15,6 @@ from src.utils import get_logprobs_from_outputs, get_messages, preprocess_messag
 
 
 def get_logprobs_and_predictions(prompts, sampling_params, llm):
-
     outputs = llm.generate(
         prompts,
         sampling_params=sampling_params,
@@ -36,42 +34,57 @@ def update_histories(df: pd.DataFrame, trial_num: int):
     if trial_num == df["trialNum"].max():
         return
 
-    df_nextround = df[df["trialNum"] == trial_num + 1][
-        ["gameId", "selection_history", "correctness_history", "target_history"]
-    ]
+    # Get the original indices of future rounds before filtering
+    future_rounds_mask = df["trialNum"] > trial_num
+    future_rounds_indices = df[future_rounds_mask].index
+
+    df_future_rounds = df.loc[future_rounds_mask][
+        [
+            "gameId",
+            "trialNum",
+            "selection_history",
+            "correctness_history",
+            "target_history",
+        ]
+    ].copy()
     df_thisround = df[df["trialNum"] == trial_num][["gameId", "model_prediction"]]
 
-    df_nextround = df_nextround.merge(df_thisround, on="gameId", how="left")
+    df_future_rounds = df_future_rounds.merge(df_thisround, on="gameId", how="left")
+
+    print(f"df future rounds length: {len(df_future_rounds)}")
+    print(f"future indices length: {len(future_rounds_indices)}")
 
     # update the selection history
-    df_nextround["selection_history"] = df_nextround.apply(
+    df_future_rounds["selection_history"] = df_future_rounds.apply(
         lambda x: x["selection_history"] + [x["model_prediction"]],
         axis=1,
     )
     # update the correctness history
-    df_nextround["correctness_history"] = df_nextround.apply(
+    df_future_rounds["correctness_history"] = df_future_rounds.apply(
         lambda x: x["correctness_history"]
-        + [x["model_prediction"] == x["target_history"][-1]],
+        + [x["model_prediction"] == x["target_history"][x["trialNum"] - 1]],
         axis=1,
     )
 
-    # update the dataframe's selection and correctness histories
-    df.loc[df_nextround.index, "selection_history"] = df_nextround["selection_history"]
-    df.loc[df_nextround.index, "correctness_history"] = df_nextround[
+    # update the dataframe's selection and correctness histories using original indices
+    df.loc[future_rounds_indices, "selection_history"] = df_future_rounds[
+        "selection_history"
+    ].values
+    df.loc[future_rounds_indices, "correctness_history"] = df_future_rounds[
         "correctness_history"
-    ]
+    ].values
 
 
 def prepare_round_prompts(
-    df: pd.DataFrame,
+    df_round: pd.DataFrame,
     processor,
     include_image: bool,
     grid_image: Image.Image,
     model_name: str,
 ):
     all_prompts = []
-    df["chat_prompt"] = df.apply(preprocess_messages, axis=1)
-    for chat_prompt in df["chat_prompt"]:
+    df_round["chat_prompt"] = df_round.apply(preprocess_messages, axis=1)
+    for chat_prompt in df_round["chat_prompt"]:
         messages = get_messages(
             SYSTEM_PROMPT, chat_prompt, include_image, grid_image, model_name
         )
@@ -108,12 +121,8 @@ def run_interactive_evaluation(
     if "trialNum" not in df.columns:
         df["trialNum"] = df["matcher_trialNum"]
 
-    df["selection_history"] = df["selection_history"].apply(
-        lambda x: literal_eval(x.replace("null", '"no response"'))
-    )
-    df["correctness_history"] = df["correctness_history"].apply(
-        lambda x: literal_eval(x.replace("true", "True").replace("false", "False"))
-    )
+    df["selection_history"] = [[] for _ in range(len(df))]
+    df["correctness_history"] = [[] for _ in range(len(df))]
 
     for trial_num in range(df["trialNum"].max() + 1):
         df_round = df[df["trialNum"] == trial_num]
@@ -133,5 +142,4 @@ def run_interactive_evaluation(
         # update the selection and correctness histories
         update_histories(df, trial_num)
 
-    return df
     return df

@@ -40,10 +40,11 @@ def get_messages(system_prompt, chat_prompt, include_image, grid_image, model_na
             {"role": "system", "content": system_prompt},
             *chat_prompt,
         ]
-        messages[1]["content"] = [
-            {"type": "image", "image": grid_image},
-            {"type": "text", "text": messages[1]["content"]},
-        ]
+        if include_image:
+            messages[1]["content"] = [
+                {"type": "image", "image": grid_image},
+                {"type": "text", "text": messages[1]["content"]},
+            ]
     else:
         # otherwise the image goes in the system prompt
         if include_image:
@@ -99,7 +100,8 @@ def preprocess_messages(row):
     message_history = row["message_history"]
     if isinstance(message_history, str):
         message_history = literal_eval(message_history.replace("nan", "''"))
-    else:
+    elif not isinstance(message_history, list):
+        warnings.warn(f"Message history is not a list: {message_history}")
         message_history = []
 
     selection_history = row["selection_history"]
@@ -107,7 +109,8 @@ def preprocess_messages(row):
         selection_history = literal_eval(
             selection_history.replace("null", '"no response"')
         )
-    else:
+    elif not isinstance(selection_history, list):
+        warnings.warn(f"Selection history is not a list: {selection_history}")
         selection_history = []
 
     correctness_history = row["correctness_history"]
@@ -115,8 +118,14 @@ def preprocess_messages(row):
         correctness_history = literal_eval(
             correctness_history.replace("true", "True").replace("false", "False")
         )
-    else:
+    elif not isinstance(correctness_history, list):
+        warnings.warn(f"Correctness history is not a list: {correctness_history}")
         correctness_history = []
+
+    if not (len(message_history) == len(selection_history) == len(correctness_history)):
+        warnings.warn(
+            f"Length of message_history, selection_history, and correctness_history must be the same. Got {len(message_history)}, {len(selection_history)}, and {len(correctness_history)}. game ID: {row['gameId']}"
+        )
 
     for messages, selection, correctness in zip(
         message_history, selection_history, correctness_history

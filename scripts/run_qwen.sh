@@ -23,4 +23,5 @@ python scripts/call_lm.py \
     --model_name $MODEL_NAME \
     --tensor_parallel_size 2 \
     --data_dir full_feedback \
-    --interactive
+    --interactive \
+    --overwrite

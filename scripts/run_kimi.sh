@@ -15,9 +15,6 @@ cd ~/vlm-tg-context
 
 # install conda if needed, create vtc environment if needed, activate vtc
 source scripts/set_up_conda.sh
-
-source ~/.zshrc
-cd ~/vlm-tg-context
 conda activate vtc
 
 MODEL_NAME="moonshotai/Kimi-VL-A3B-Instruct"
