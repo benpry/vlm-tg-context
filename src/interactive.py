@@ -3,31 +3,20 @@ Code for the interactive version of the language model evaluation, where the mod
 feedback on its own choices rather than human responses.
 """
 
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
 import pandas as pd
 from PIL import Image
-from transformers import AutoProcessor
-from vllm import LLM, SamplingParams
+from openai import OpenAI
+from tqdm import tqdm
 
-from src.lm import CHOICES, SYSTEM_PROMPT
-from src.utils import get_logprobs_from_outputs, get_messages, preprocess_messages
-
-
-def get_logprobs_and_predictions(prompts, sampling_params, llm):
-    outputs = llm.generate(
-        prompts,
-        sampling_params=sampling_params,
-        use_tqdm=True,
-    )
-
-    all_choice_logprobs = get_logprobs_from_outputs(outputs, CHOICES)
-
-    predictions = []
-    for choice_logprobs in all_choice_logprobs:
-        predictions.append(max(choice_logprobs, key=choice_logprobs.get))
-
-    return all_choice_logprobs, predictions
+from src.lm import CHOICES, SYSTEM_PROMPT, get_completion_with_backoff
+from src.utils import (
+    get_logprobs_from_openai_choice,
+    get_openai_messages,
+    preprocess_messages,
+)
 
 
 def update_histories(df: pd.DataFrame, trial_num: int):
@@ -75,46 +64,38 @@ def update_histories(df: pd.DataFrame, trial_num: int):
     ].values
 
 
-def prepare_round_prompts(
-    df_round: pd.DataFrame,
-    processor,
-    include_image: bool,
-    grid_image: Image.Image,
-    model_name: str,
-):
-    all_prompts = []
-    df_round["chat_prompt"] = df_round.apply(preprocess_messages, axis=1)
-    for chat_prompt in df_round["chat_prompt"]:
-        messages = get_messages(
-            SYSTEM_PROMPT, chat_prompt, include_image, grid_image, model_name
-        )
+def process_interactive_row(client, model_name, messages):
+    response = get_completion_with_backoff(
+        client=client,
+        model=model_name,
+        messages=messages,
+        max_tokens=1,
+        temperature=1,
+        logprobs=True,
+        top_logprobs=20,
+    )
 
-        text = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=False
-        )
-
-        if include_image:
-            all_prompts.append(
-                {"prompt": text, "multi_modal_data": {"image": grid_image}}
-            )
-        else:
-            all_prompts.append({"prompt": text})
-
-    return all_prompts
+    choice_logprobs = get_logprobs_from_openai_choice(response.choices[0], CHOICES)
+    
+    if choice_logprobs:
+        prediction = max(choice_logprobs, key=choice_logprobs.get)
+    else:
+        # If no choice tokens found, take the generated text
+        content = response.choices[0].message.content
+        prediction = content.strip() if content else ""
+        
+    return choice_logprobs, prediction
 
 
 def run_interactive_evaluation(
     df: pd.DataFrame,
     model_name: str,
-    llm: LLM,
+    client: OpenAI,
     grid_image: Image.Image,
     include_image: bool = True,
     n_trials: Optional[int] = None,
-) -> list[pd.DataFrame]:
-    processor = AutoProcessor.from_pretrained(model_name)
-
-    sampling_params = SamplingParams(max_tokens=1, logprobs=1000, temperature=1)
-
+) -> pd.DataFrame:
+    
     if n_trials is not None:
         df = df.head(n_trials)
 
@@ -124,20 +105,47 @@ def run_interactive_evaluation(
     df["selection_history"] = [[] for _ in range(len(df))]
     df["correctness_history"] = [[] for _ in range(len(df))]
 
+    # Ensure columns exist
+    df["model_logprobs"] = None
+    df["model_prediction"] = None
+    # We need to make sure we can assign lists to model_logprobs, so convert to object type if needed
+    df["model_logprobs"] = df["model_logprobs"].astype(object)
+
     for trial_num in range(df["trialNum"].max() + 1):
-        df_round = df[df["trialNum"] == trial_num]
+        df_round = df[df["trialNum"] == trial_num].copy()
+        
+        if df_round.empty:
+            continue
 
-        prompts = prepare_round_prompts(
-            df_round, processor, include_image, grid_image, model_name
-        )
+        df_round["chat_prompt"] = df_round.apply(preprocess_messages, axis=1)
 
-        choice_logprobs, predictions = get_logprobs_and_predictions(
-            prompts, sampling_params, llm
-        )
+        print(f"Processing round {trial_num}...")
+        
+        # Prepare messages outside threads
+        row_messages = []
+        for idx, row in df_round.iterrows():
+            messages = get_openai_messages(
+                SYSTEM_PROMPT, row["chat_prompt"], include_image, grid_image
+            )
+            row_messages.append(messages)
+            
+        with ThreadPoolExecutor(max_workers=20) as executor:
+            results = list(
+                tqdm(
+                    executor.map(
+                        lambda msgs: process_interactive_row(client, model_name, msgs),
+                        row_messages,
+                    ),
+                    total=len(row_messages),
+                )
+            )
+
+        choice_logprobs_list = [r[0] for r in results]
+        predictions_list = [r[1] for r in results]
 
         # save the logprobs to the dataframe
-        df.loc[df_round.index, "model_logprobs"] = choice_logprobs
-        df.loc[df_round.index, "model_prediction"] = predictions
+        df.loc[df_round.index, "model_logprobs"] = choice_logprobs_list
+        df.loc[df_round.index, "model_prediction"] = predictions_list
 
         # update the selection and correctness histories
         update_histories(df, trial_num)

@@ -1,5 +1,7 @@
 import warnings
 from ast import literal_eval
+import base64
+from io import BytesIO
 
 
 def get_image_token(model_name, include_image: bool = True):
@@ -11,7 +13,7 @@ def get_image_token(model_name, include_image: bool = True):
 
     model_name = model_name.lower()
     if "gemma" in model_name:
-        return "<start_of_image>"
+        return "<image>"
     elif "llama" in model_name:
         return "<|image|>"
     elif "qwen" in model_name:
@@ -172,3 +174,65 @@ def get_logprobs_from_outputs(outputs, choice_tokens):
             warnings.warn("Not all choice tokens found in top logprobs.")
 
     return all_choice_logprobs
+
+
+def encode_image(image):
+    buffered = BytesIO()
+    image.save(buffered, format="PNG")
+    return base64.b64encode(buffered.getvalue()).decode("utf-8")
+
+
+def get_openai_messages(system_prompt, chat_prompt, include_image, grid_image):
+    messages = [{"role": "system", "content": system_prompt}]
+    
+    # Copy chat_prompt to avoid mutating original
+    chat_messages = [msg.copy() for msg in chat_prompt]
+    
+    if include_image and chat_messages:
+        # Find first user message
+        first_user_idx = -1
+        for i, msg in enumerate(chat_messages):
+            if msg["role"] == "user":
+                first_user_idx = i
+                break
+        
+        if first_user_idx != -1:
+            content = chat_messages[first_user_idx]["content"]
+            base64_image = encode_image(grid_image)
+            
+            new_content = [
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/png;base64,{base64_image}"
+                    }
+                },
+                {
+                    "type": "text",
+                    "text": content
+                }
+            ]
+            chat_messages[first_user_idx]["content"] = new_content
+
+    messages.extend(chat_messages)
+    return messages
+
+
+def get_logprobs_from_openai_choice(choice, choice_tokens):
+    if not choice.logprobs or not choice.logprobs.content:
+        return {}
+    
+    first_token_logprobs = choice.logprobs.content[0]
+    top_logprobs = first_token_logprobs.top_logprobs
+    
+    choice_logprobs = {}
+    for top_lp in top_logprobs:
+        token = top_lp.token.strip()
+        if token in choice_tokens:
+            choice_logprobs[token] = top_lp.logprob
+
+    # send a warning if not all the choice tokens are in the top logprobs
+    if not all(token in choice_logprobs for token in choice_tokens):
+        warnings.warn("Not all choice tokens found in top logprobs.")
+    
+    return choice_logprobs

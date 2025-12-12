@@ -18,9 +18,11 @@ source scripts/set_up_uv.sh
 
 MODEL_NAME="google/gemma-3-27b-it"
 
+vllm serve $MODEL_NAME --host 0.0.0.0 --port 8000 --tensor-parallel-size 2
+
 python scripts/call_lm.py \
     --model_name $MODEL_NAME \
-    --tensor_parallel_size 2 \
+    --api_base http://localhost:8000 \
     --data_dir full_feedback \
     --interactive \
     --overwrite
