@@ -111,7 +111,7 @@ def run_interactive_evaluation(
     include_image: bool = True,
     n_trials: Optional[int] = None,
 ) -> list[pd.DataFrame]:
-    processor = AutoProcessor.from_pretrained(model_name, trust_remote_code=True)
+    processor = AutoProcessor.from_pretrained(model_name)
 
     sampling_params = SamplingParams(max_tokens=1, logprobs=1000, temperature=1)
 

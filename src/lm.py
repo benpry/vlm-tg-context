@@ -13,7 +13,7 @@ from vllm import LLM, SamplingParams
 from src.utils import get_logprobs_from_outputs, get_messages, preprocess_messages
 
 SYSTEM_PROMPT = """You will be presented with a list of messages between people playing a reference game, where the describer has to get the matcher to choose a shape from a set of shapes. Your goal is to guess which of the shapes the describer is trying to get the matcher to choose. The shapes, with their labels, are shown in the image.
-Please answer with just the letter corresponding to the image you think the describer is trying to get the matcher to choose. You will received feedback telling you whether your choice was correct or incorrect.
+Please answer with just the letter corresponding to the image you think the describer is trying to get the matcher to choose, and no other text. You will receive feedback telling you whether your choice was correct or incorrect.
 """
 
 CHOICES = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"]

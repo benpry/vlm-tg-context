@@ -161,6 +161,10 @@ def get_logprobs_from_outputs(outputs, choice_tokens):
         for logprob in logprobs:
             if logprob.decoded_token.strip() in choice_tokens:
                 choice_logprobs[logprob.decoded_token.strip()] = logprob.logprob
+            else:
+                print(
+                    f"Found high-probability non-letter token: {logprob.decoded_token.strip()} with logprob {logprob.logprob}"
+                )
             if len(choice_logprobs) == len(choice_tokens):
                 break
 
