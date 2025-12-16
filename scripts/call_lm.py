@@ -3,13 +3,12 @@ from argparse import ArgumentParser
 from glob import glob
 
 import pandas as pd
+from openai import OpenAI
 from PIL import Image
 from pyprojroot import here
-from openai import OpenAI
 
 from src.interactive import run_interactive_evaluation
 from src.lm import get_logits
-
 
 if __name__ == "__main__":
     parser = ArgumentParser()
@@ -39,9 +38,20 @@ if __name__ == "__main__":
     parser.add_argument("--no_image", action="store_true")
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--interactive", action="store_true")
+    parser.add_argument(
+        "--yoked",
+        action="store_true",
+        help="Run batch evaluation with histories yoked to human selections (limited feedback)",
+    )
     parser.add_argument("--api_base", type=str, default=None, help="API Base URL")
 
     args = parser.parse_args()
+
+    # Handle --yoked flag as alias for human_history data
+    if args.yoked:
+        if args.data_dir is not None:
+            print("Warning: --yoked flag overrides --data_dir")
+        args.data_dir = "human_history"
 
     data_filepaths = glob(str(here(f"context_prep/{args.data_dir}/*.csv")))
     print("data filepaths:", data_filepaths)
@@ -69,6 +79,8 @@ if __name__ == "__main__":
         ).replace("context_prep", "data/logprobs")
         if args.interactive:
             output_path = output_path.replace(args.data_dir, "interactive")
+        elif args.yoked:
+            output_path = output_path.replace("human_history", "limited-feedback-yoked")
         if os.path.exists(output_path) and not args.overwrite:
             print(f"Skipping {filepath} as output file already exists.")
             continue

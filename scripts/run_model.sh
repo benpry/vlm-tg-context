@@ -5,10 +5,10 @@
 #SBATCH --gres=gpu:2
 #SBATCH --mem=64G
 #SBATCH --cpus-per-task=4
-#SBATCH --time=48:00:00
-#SBATCH --output=slurm-output/llama_%j.out
-#SBATCH --error=slurm-output/llama_%j.err
-#SBATCH --constraint=[80G|141G]
+#SBATCH --time=12:00:00
+#SBATCH --output=slurm-output/run_model_%j.out
+#SBATCH --error=slurm-output/run_model_%j.err
+#SBATCH --constraint=[ampere|hopper]
 
 source ~/.zshrc
 cd ~/vlm-tg-context
@@ -16,11 +16,11 @@ cd ~/vlm-tg-context
 # install conda if needed, create vtc environment if needed, activate vtc
 source scripts/set_up_uv.sh
 
-MODEL_NAME="meta-llama/Llama-3.2-11B-Vision-Instruct"
+MODEL_NAME=$1
+EXTRA_ARGS=$2
+
+vllm serve $MODEL_NAME --host 0.0.0.0 --port 8000 &
 
 python scripts/call_lm.py \
     --model_name $MODEL_NAME \
-    --tensor_parallel_size 2 \
-    --data_dir full_feedback \
-    --interactive \
-    --overwrite
+    $EXTRA_ARGS

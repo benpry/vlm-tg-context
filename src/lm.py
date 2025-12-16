@@ -2,22 +2,27 @@
 Code for calling the language model to get choice logits
 """
 
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
-from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
-from PIL import Image
-from tqdm import tqdm
 from openai import OpenAI
+from PIL import Image
 from tenacity import retry, stop_after_attempt, wait_exponential
+from tqdm import tqdm
 
-from src.utils import get_openai_messages, get_logprobs_from_openai_choice, preprocess_messages
+from src.utils import (
+    get_logprobs_from_openai_choice,
+    get_openai_messages,
+    preprocess_messages,
+)
 
 CHOICES = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"]
 
 SYSTEM_PROMPT = """You will be presented with a list of messages between people playing a reference game, where the describer has to get the matcher to choose a shape from a set of shapes. Your goal is to guess which of the shapes the describer is trying to get the matcher to choose. The shapes, with their labels, are shown in the image.
 Please answer with just the letter corresponding to the image you think the describer is trying to get the matcher to choose, and no other text. You will receive feedback telling you whether your choice was correct or incorrect.
 """
+
 
 @retry(wait=wait_exponential(multiplier=1, min=4, max=60), stop=stop_after_attempt(10))
 def get_completion_with_backoff(client, **kwargs):
@@ -41,6 +46,14 @@ def get_logits_single_row(
     return get_logprobs_from_openai_choice(response.choices[0], CHOICES)
 
 
+REQUIRED_COLUMNS = [
+    "message_history",
+    "selection_history",
+    "correctness_history",
+    "message",
+]
+
+
 def get_logits(
     df: pd.DataFrame,
     model_name: str,
@@ -49,7 +62,15 @@ def get_logits(
     include_image: bool = True,
     n_trials: Optional[int] = None,
 ) -> pd.DataFrame:
-    
+    # Validate required columns exist
+    missing_columns = [col for col in REQUIRED_COLUMNS if col not in df.columns]
+    if missing_columns:
+        raise ValueError(
+            f"Missing required columns: {missing_columns}. "
+            "For yoked/limited feedback evaluation, ensure your data includes "
+            "message_history, selection_history, correctness_history, and message columns."
+        )
+
     if n_trials is not None:
         df = df.head(n_trials)
 
@@ -62,7 +83,7 @@ def get_logits(
     ]
 
     print("Doing inference...")
-    
+
     with ThreadPoolExecutor(max_workers=20) as executor:
         all_choice_logprobs = list(
             tqdm(
