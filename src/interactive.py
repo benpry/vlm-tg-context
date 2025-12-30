@@ -7,8 +7,8 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
 import pandas as pd
-from PIL import Image
 from openai import OpenAI
+from PIL import Image
 from tqdm import tqdm
 
 from src.lm import CHOICES, SYSTEM_PROMPT, get_completion_with_backoff
@@ -29,19 +29,21 @@ def update_histories(df: pd.DataFrame, trial_num: int):
 
     df_future_rounds = df.loc[future_rounds_mask][
         [
-            "gameId",
+            "workerid",
             "trialNum",
             "selection_history",
             "correctness_history",
             "target_history",
         ]
     ].copy()
-    df_thisround = df[df["trialNum"] == trial_num][["gameId", "model_prediction"]]
 
-    df_future_rounds = df_future_rounds.merge(df_thisround, on="gameId", how="left")
-
-    print(f"df future rounds length: {len(df_future_rounds)}")
-    print(f"future indices length: {len(future_rounds_indices)}")
+    # Use map instead of merge to preserve the original index and row count
+    prediction_map = df[df["trialNum"] == trial_num].set_index("workerid")[
+        "model_prediction"
+    ]
+    df_future_rounds["model_prediction"] = df_future_rounds["workerid"].map(
+        prediction_map
+    )
 
     # update the selection history
     df_future_rounds["selection_history"] = df_future_rounds.apply(
@@ -72,18 +74,18 @@ def process_interactive_row(client, model_name, messages):
         max_tokens=1,
         temperature=1,
         logprobs=True,
-        top_logprobs=20,
+        top_logprobs=1000,
     )
 
     choice_logprobs = get_logprobs_from_openai_choice(response.choices[0], CHOICES)
-    
+
     if choice_logprobs:
         prediction = max(choice_logprobs, key=choice_logprobs.get)
     else:
         # If no choice tokens found, take the generated text
         content = response.choices[0].message.content
         prediction = content.strip() if content else ""
-        
+
     return choice_logprobs, prediction
 
 
@@ -95,7 +97,6 @@ def run_interactive_evaluation(
     include_image: bool = True,
     n_trials: Optional[int] = None,
 ) -> pd.DataFrame:
-    
     if n_trials is not None:
         df = df.head(n_trials)
 
@@ -113,14 +114,14 @@ def run_interactive_evaluation(
 
     for trial_num in range(df["trialNum"].max() + 1):
         df_round = df[df["trialNum"] == trial_num].copy()
-        
+
         if df_round.empty:
             continue
 
         df_round["chat_prompt"] = df_round.apply(preprocess_messages, axis=1)
 
         print(f"Processing round {trial_num}...")
-        
+
         # Prepare messages outside threads
         row_messages = []
         for idx, row in df_round.iterrows():
@@ -128,7 +129,7 @@ def run_interactive_evaluation(
                 SYSTEM_PROMPT, row["chat_prompt"], include_image, grid_image
             )
             row_messages.append(messages)
-            
+
         with ThreadPoolExecutor(max_workers=20) as executor:
             results = list(
                 tqdm(

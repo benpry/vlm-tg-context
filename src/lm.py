@@ -24,7 +24,7 @@ Please answer with just the letter corresponding to the image you think the desc
 """
 
 
-@retry(wait=wait_exponential(multiplier=1, min=4, max=60), stop=stop_after_attempt(10))
+# @retry(wait=wait_exponential(multiplier=1, min=4, max=60), stop=stop_after_attempt(10))
 def get_completion_with_backoff(client, **kwargs):
     return client.chat.completions.create(**kwargs)
 
@@ -41,7 +41,7 @@ def get_logits_single_row(
         max_tokens=1,
         temperature=1,
         logprobs=True,
-        top_logprobs=20,
+        top_logprobs=1000,
     )
     return get_logprobs_from_openai_choice(response.choices[0], CHOICES)
 
@@ -84,16 +84,18 @@ def get_logits(
 
     print("Doing inference...")
 
-    with ThreadPoolExecutor(max_workers=20) as executor:
-        all_choice_logprobs = list(
-            tqdm(
-                executor.map(
-                    lambda msgs: get_logits_single_row(client, model_name, msgs),
-                    all_messages,
-                ),
-                total=len(all_messages),
-            )
-        )
+    all_choice_logprobs = [get_logits_single_row(client, model_name, msgs) for msgs in all_messages[:10]]
+
+    # with ThreadPoolExecutor(max_workers=20) as executor:
+    #     all_choice_logprobs = list(
+    #         tqdm(
+    #             executor.map(
+    #                 lambda msgs: get_logits_single_row(client, model_name, msgs),
+    #                 all_messages,
+    #             ),
+    #             total=len(all_messages),
+    #         )
+    #     )
 
     df["model_logprobs"] = all_choice_logprobs
 

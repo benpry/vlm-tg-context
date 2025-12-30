@@ -19,11 +19,6 @@ if __name__ == "__main__":
         required=True,
     )
     parser.add_argument(
-        "--data_dir",
-        type=str,
-        help="the directory to read data from",
-    )
-    parser.add_argument(
         "--grid_image_path",
         type=str,
         default="data/compiled_grid.png",
@@ -48,12 +43,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Handle --yoked flag as alias for human_history data
-    if args.yoked:
-        if args.data_dir is not None:
-            print("Warning: --yoked flag overrides --data_dir")
-        args.data_dir = "human_history"
+    if args.yoked or args.interactive:
+        data_dir = "human_history"
+    else:
+        data_dir = "full_feedback"
 
-    data_filepaths = glob(str(here(f"context_prep/{args.data_dir}/*.csv")))
+    data_filepaths = glob(str(here(f"context_prep/{data_dir}/*.csv")))
     print("data filepaths:", data_filepaths)
 
     dfs = []
@@ -68,7 +63,7 @@ if __name__ == "__main__":
     if "fireworks" in args.api_base:
         client.api_key = os.getenv("FIREWORKS_API_KEY")
     elif "google" in args.api_base:
-        client.api_key = os.getenv("GOOGLE_API_KEY")
+        client.api_key = os.getenv("GEMINI_COCOLAB_API_KEY")
     elif "together" in args.api_base:
         client.api_key = os.getenv("TOGETHER_API_KEY")
 
@@ -78,9 +73,9 @@ if __name__ == "__main__":
             f"_{args.model_name.split('/')[-1]}_logprobs{'_no_image' if args.no_image else ''}.csv",
         ).replace("context_prep", "data/logprobs")
         if args.interactive:
-            output_path = output_path.replace(args.data_dir, "interactive")
+            output_path = output_path.replace(data_dir, "interactive")
         elif args.yoked:
-            output_path = output_path.replace("human_history", "limited-feedback-yoked")
+            output_path = output_path.replace(data_dir, "human_yoked")
         if os.path.exists(output_path) and not args.overwrite:
             print(f"Skipping {filepath} as output file already exists.")
             continue

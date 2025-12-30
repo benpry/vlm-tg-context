@@ -8,7 +8,7 @@
 #SBATCH --time=12:00:00
 #SBATCH --output=slurm-output/run_model_%j.out
 #SBATCH --error=slurm-output/run_model_%j.err
-#SBATCH --constraint=[ampere|hopper]
+#SBATCH --constraint=[32G|40G|48G|80G|141G]
 
 source ~/.zshrc
 cd ~/vlm-tg-context
@@ -17,10 +17,32 @@ cd ~/vlm-tg-context
 source scripts/set_up_uv.sh
 
 MODEL_NAME=$1
-EXTRA_ARGS=$2
+shift
+EXTRA_ARGS=("$@")
 
-vllm serve $MODEL_NAME --host 0.0.0.0 --port 8000 &
+echo "model name: $MODEL_NAME"
+echo "extra args: ${EXTRA_ARGS}"
+
+# Pick a unique port per job (override with PORT env var if set)
+PORT=${PORT:-$((8000 + (${SLURM_JOB_ID:-0} % 1000)))}
+API_BASE="http://localhost:${PORT}/v1"
+echo "using port: $PORT (api_base: $API_BASE)"
+
+vllm serve $MODEL_NAME \
+ --tensor-parallel-size 2 \
+ --dtype bfloat16 \
+ --host 0.0.0.0 \
+ --port $PORT \
+ --limit-mm-per-prompt '{"image":1}' \
+ --max-model-len 8192 \
+ --gpu-memory-utilization 0.95 \
+ --max-num-seqs 8 \
+ --max-logprobs 1000 \
+ --trust-remote-code &
+
+sleep 5m
 
 python scripts/call_lm.py \
     --model_name $MODEL_NAME \
-    $EXTRA_ARGS
+    --api_base $API_BASE \
+    $EXTRA_ARGS 
