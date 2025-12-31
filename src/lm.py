@@ -12,6 +12,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 from tqdm import tqdm
 
 from src.utils import (
+    convert_to_google_genai_style,
     get_logprobs_from_openai_choice,
     get_openai_messages,
     preprocess_messages,
@@ -24,9 +25,32 @@ Please answer with just the letter corresponding to the image you think the desc
 """
 
 
-# @retry(wait=wait_exponential(multiplier=1, min=4, max=60), stop=stop_after_attempt(10))
-def get_completion_with_backoff(client, **kwargs):
-    return client.chat.completions.create(**kwargs)
+@retry(wait=wait_exponential(multiplier=1, min=4, max=60), stop=stop_after_attempt(10))
+def get_completion_with_backoff(client, model, messages):
+    if "gemini" in model.lower():
+        # use the google genai client
+        genai_messages, system_instruction = convert_to_google_genai_style(messages)
+        return client.models.generate_content(
+            model=model,
+            contents=genai_messages,
+            system_instruction=system_instruction,
+            geneartion_config=types.GenerateContentConfig(
+                response_logprobs=True,
+                logprobs=20,
+                max_output_tokens=1,
+                temperature=1
+            ),
+        )
+    else:
+        # we're using an openai-style client
+        return client.chat.completions.create(
+            model=model,
+            messages=messages,
+            max_tokens=1,
+            temperature=1,
+            logprobs=True,
+            top_logprobs=1000,
+        )
 
 
 def get_logits_single_row(
@@ -38,10 +62,6 @@ def get_logits_single_row(
         client=client,
         model=model_name,
         messages=messages,
-        max_tokens=1,
-        temperature=1,
-        logprobs=True,
-        top_logprobs=1000,
     )
     return get_logprobs_from_openai_choice(response.choices[0], CHOICES)
 
@@ -84,18 +104,16 @@ def get_logits(
 
     print("Doing inference...")
 
-    all_choice_logprobs = [get_logits_single_row(client, model_name, msgs) for msgs in all_messages[:10]]
-
-    # with ThreadPoolExecutor(max_workers=20) as executor:
-    #     all_choice_logprobs = list(
-    #         tqdm(
-    #             executor.map(
-    #                 lambda msgs: get_logits_single_row(client, model_name, msgs),
-    #                 all_messages,
-    #             ),
-    #             total=len(all_messages),
-    #         )
-    #     )
+    with ThreadPoolExecutor(max_workers=20) as executor:
+        all_choice_logprobs = list(
+            tqdm(
+                executor.map(
+                    lambda msgs: get_logits_single_row(client, model_name, msgs),
+                    all_messages,
+                ),
+                total=len(all_messages),
+            )
+        )
 
     df["model_logprobs"] = all_choice_logprobs
 

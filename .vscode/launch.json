@@ -1,0 +1,24 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Interactive Evaluation",
+            "type": "python",
+            "request": "launch",
+            "program": "scripts/call_lm.py",
+            "args": [
+                "--model_name",
+                "meta-llama/Llama-3.2-11B-Vision-Instruct",
+                "--api_base",
+                "http://localhost:8000/v1",
+                "--interactive",
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "subProcess": false
+        }
+    ]
+}

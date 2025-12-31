@@ -57,15 +57,12 @@ if __name__ == "__main__":
 
     grid_image = Image.open(here(args.grid_image_path))
 
-    client = OpenAI(
-        base_url=args.api_base,
-    )
-    if "fireworks" in args.api_base:
-        client.api_key = os.getenv("FIREWORKS_API_KEY")
-    elif "google" in args.api_base:
-        client.api_key = os.getenv("GEMINI_COCOLAB_API_KEY")
-    elif "together" in args.api_base:
-        client.api_key = os.getenv("TOGETHER_API_KEY")
+    if "google" in args.api_base:
+        client = genai.Client(vertexai=True, project="hs-llmevals")
+    else:
+        client = OpenAI(
+            base_url=args.api_base,
+        )
 
     for filepath, df in zip(data_filepaths, dfs):
         output_path = filepath.replace(

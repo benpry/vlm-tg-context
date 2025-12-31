@@ -236,3 +236,65 @@ def get_logprobs_from_openai_choice(choice, choice_tokens):
         warnings.warn("Not all choice tokens found in top logprobs.")
     
     return choice_logprobs
+
+
+from google.genai import types
+
+def convert_to_google_genai_style(messages):
+    """
+    Convert OpenAI-style messages to Google GenAI-style contents.
+    Returns a tuple (contents, system_instruction).
+    """
+    contents = []
+    system_instruction = None
+
+    for message in messages:
+        role = message["role"]
+        content = message["content"]
+
+        if role == "system":
+            if isinstance(content, str):
+                system_instruction = content
+            elif isinstance(content, list):
+                # Handle list content for system prompt if necessary (e.g. text only)
+                parts = []
+                for part in content:
+                    if part.get("type") == "text":
+                        parts.append(part["text"])
+                if parts:
+                    system_instruction = "\n".join(parts)
+            continue
+
+        parts = []
+        if isinstance(content, str):
+            parts.append(types.Part(text=content))
+        elif isinstance(content, list):
+            for part in content:
+                if part["type"] == "text":
+                    parts.append(types.Part(text=part["text"]))
+                elif part["type"] == "image_url":
+                    image_url = part["image_url"]["url"]
+                    if image_url.startswith("data:"):
+                        # Extract mime_type and base64 data
+                        header, data = image_url.split(",", 1)
+                        mime_type = header.split(";")[0].split(":")[1]
+                        parts.append(types.Part(
+                            inline_data=types.Blob(
+                                mime_type=mime_type,
+                                data=base64.b64decode(data)
+                            )
+                        ))
+                    else:
+                        # Handle regular URLs if needed, but for now we skip or just pass typical cases
+                        pass
+
+        if role == "assistant":
+            role = "model"
+        
+        contents.append(types.Content(
+            role=role,
+            parts=parts
+        ))
+
+    return contents, system_instruction
+
