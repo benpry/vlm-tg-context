@@ -71,10 +71,6 @@ def process_interactive_row(client, model_name, messages):
         client=client,
         model=model_name,
         messages=messages,
-        max_tokens=1,
-        temperature=1,
-        logprobs=True,
-        top_logprobs=1000,
     )
 
     choice_logprobs = get_logprobs_from_openai_choice(response.choices[0], CHOICES)

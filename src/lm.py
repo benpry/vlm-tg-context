@@ -8,7 +8,6 @@ from typing import Optional
 import pandas as pd
 from openai import OpenAI
 from PIL import Image
-from tenacity import retry, stop_after_attempt, wait_exponential
 from tqdm import tqdm
 
 from src.utils import (
@@ -25,7 +24,7 @@ Please answer with just the letter corresponding to the image you think the desc
 """
 
 
-@retry(wait=wait_exponential(multiplier=1, min=4, max=60), stop=stop_after_attempt(10))
+# @retry(wait=wait_exponential(multiplier=1, min=4, max=60), stop=stop_after_attempt(10))
 def get_completion_with_backoff(client, model, messages):
     if "gemini" in model.lower():
         # use the google genai client
@@ -35,10 +34,7 @@ def get_completion_with_backoff(client, model, messages):
             contents=genai_messages,
             system_instruction=system_instruction,
             geneartion_config=types.GenerateContentConfig(
-                response_logprobs=True,
-                logprobs=20,
-                max_output_tokens=1,
-                temperature=1
+                response_logprobs=True, logprobs=20, temperature=1
             ),
         )
     else:

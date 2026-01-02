@@ -1,6 +1,6 @@
 #!/bin/zsh
 #SBATCH --account=cocoflops
-#SBATCH --partition=cocoflops,sc-loprio
+#SBATCH --partition=cocoflops
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:2
 #SBATCH --mem=64G
@@ -8,7 +8,7 @@
 #SBATCH --time=12:00:00
 #SBATCH --output=slurm-output/run_model_%j.out
 #SBATCH --error=slurm-output/run_model_%j.err
-#SBATCH --constraint=[32G|40G|48G|80G|141G]
+#SBATCH --constraint=[40G|48G|80G|141G]
 
 source ~/.zshrc
 cd ~/vlm-tg-context
@@ -32,7 +32,7 @@ vllm serve $MODEL_NAME \
  --tensor-parallel-size 2 \
  --dtype bfloat16 \
  --host 0.0.0.0 \
- --port $PORT \
+ --port ${PORT} \
  --limit-mm-per-prompt '{"image":1}' \
  --max-model-len 8192 \
  --gpu-memory-utilization 0.95 \
