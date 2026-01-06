@@ -10,6 +10,8 @@ from openai import OpenAI
 from PIL import Image
 from tqdm import tqdm
 
+from tenacity import retry, stop_after_attempt, wait_exponential
+
 from src.utils import (
     convert_to_google_genai_style,
     get_logprobs_from_openai_choice,
@@ -24,7 +26,7 @@ Please answer with just the letter corresponding to the image you think the desc
 """
 
 
-# @retry(wait=wait_exponential(multiplier=1, min=4, max=60), stop=stop_after_attempt(10))
+@retry(wait=wait_exponential(multiplier=1, min=4, max=60), stop=stop_after_attempt(10))
 def get_completion_with_backoff(client, model, messages):
     if "gemini" in model.lower():
         # use the google genai client
@@ -39,13 +41,22 @@ def get_completion_with_backoff(client, model, messages):
         )
     else:
         # we're using an openai-style client
+        if "claude" in model.lower():
+            # add cache control to the last message
+            messages[-1]["cache_control"] = {
+                "type": "ephemeral",
+            }
+            n_logprobs = 20
+        else:
+            n_logprobs = 1000
+
         return client.chat.completions.create(
             model=model,
             messages=messages,
             max_tokens=1,
             temperature=1,
             logprobs=True,
-            top_logprobs=1000,
+            top_logprobs=n_logprobs,
         )
 
 

@@ -64,6 +64,10 @@ if __name__ == "__main__":
             base_url=args.api_base,
         )
 
+    if "anthropic" in args.api_base:
+        client.api_key = os.getenv("ANTHROPIC_API_KEY")
+        print(f"using api key: {client.api_key}")
+
     for filepath, df in zip(data_filepaths, dfs):
         output_path = filepath.replace(
             ".csv",

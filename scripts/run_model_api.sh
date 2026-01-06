@@ -7,7 +7,6 @@
 #SBATCH --time=12:00:00
 #SBATCH --output=slurm-output/api_%j.out
 #SBATCH --error=slurm-output/api_%j.err
-#SBATCH --constraint=[32G|40G|48G|80G|141G]
 
 source ~/.zshrc
 cd ~/vlm-tg-context
