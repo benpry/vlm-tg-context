@@ -12,6 +12,7 @@ library(patchwork)
 library(lme4)
 library(lmerTest)
 library(brms)
+library(udpipe)
 
 source(here("analysis_scripts", "logprobs.R"))
 source(here("analysis_scripts", "plot_helpers.R"))
@@ -36,7 +37,9 @@ human_selections <- human_data |>
   mutate(workerid = as.factor(workerid),
          matcher_trialNum = (trial_index - 3) %/% 3,
          matcher_repNum = matcher_trialNum %/% 12,
-         workerid = ifelse(workerid == "3157" & condition == "yoked", "3157a", workerid)) |> # somehow two participants were assigned to 3157 -- but each set looks complete?
+         # somehow two participants were assigned to 3157/139 -- but each set looks complete?
+         workerid = ifelse(workerid == "3157" & condition == "yoked", "3157a", workerid),
+         workerid = ifelse(workerid == "139" & gameId == "Z2WAkYpWiXwuGcdME", "139a", workerid)) |> 
   filter(workerid != "141", workerid != "35") |> # exclude two participants who didn't finish
   select(-trial_index)
 ```
@@ -139,58 +142,38 @@ random_human <- human_selections_new |>
 
 ## Everything
 ```{r}
-qwen_logprobs_full <- get_all_logprobs("Qwen2.5-VL-32B-Instruct", prefix = "full_feedback/")
-gemma_logprobs_full <- get_all_logprobs("gemma-3-27b-it", prefix = "full_feedback/")
-llama_logprobs_full <- get_all_logprobs("Llama-3.2-11B-Vision-Instruct", prefix = "full_feedback/")
-kimi_logprobs_full <- get_all_logprobs("Kimi-VL-A3B-Instruct", prefix = "full_feedback/")
+logprob_files <- list.files(here("data", "logprobs"), recursive = TRUE)
 
-qwen_logprobs <- filter_logprobs(qwen_logprobs_full)
-gemma_logprobs <- filter_logprobs(gemma_logprobs_full)
-llama_logprobs <- filter_logprobs(llama_logprobs_full)
-kimi_logprobs <- filter_logprobs(kimi_logprobs_full)
+full_logprobs <- map(logprob_files, \(f) {
+  load_logprobs(f)
+}) |> list_rbind()
+
+logprobs_base <- full_logprobs |> 
+  filter_logprobs()
 ```
-
-```{r}
-qwen_logprobs_noimg <- get_all_logprobs("Qwen2.5-VL-32B-Instruct", no_image = TRUE)
-gemma_logprobs_noimg <- get_all_logprobs("gemma-3-27b-it", no_image = TRUE)
-llama_logprobs_noimg <- get_all_logprobs("Llama-3.2-11B-Vision-Instruct", no_image = TRUE)
-kimi_logprobs_noimg <- get_all_logprobs("Kimi-VL-A3B-Instruct", no_image = TRUE)
-
-qwen_logprobs_ni <- filter_logprobs(qwen_logprobs_noimg)
-gemma_logprobs_ni <- filter_logprobs(gemma_logprobs_noimg)
-llama_logprobs_ni <- filter_logprobs(llama_logprobs_noimg)
-kimi_logprobs_ni <- filter_logprobs(kimi_logprobs_noimg)
-```
-
-```{r}
-qwen_logprobs_f32 <- get_all_logprobs("Qwen2.5-VL-32B-Instruct", float32 = TRUE)
-gemma_logprobs_f32 <- get_all_logprobs("gemma-3-27b-it", float32 = TRUE)
-llama_logprobs_f32 <- get_all_logprobs("Llama-3.2-11B-Vision-Instruct", float32 = TRUE)
-kimi_logprobs_f32 <- get_all_logprobs("Kimi-VL-A3B-Instruct", float32 = TRUE)
-
-qwen_logprobs_f <- filter_logprobs(qwen_logprobs_f32)
-gemma_logprobs_f <- filter_logprobs(gemma_logprobs_f32)
-llama_logprobs_f <- filter_logprobs(llama_logprobs_f32)
-kimi_logprobs_f <- filter_logprobs(kimi_logprobs_f32)
-```
-
 
 Fix lengths
 ```{r}
 human_orig_fixed <- human_orig |> 
-  cbind(qwen_logprobs |> 
-          filter(condition == "yoked") |> 
+  cbind(logprobs_base |> 
+          filter(type == "model_gemma",
+                 feedback == "full",
+                 condition == "yoked") |> 
           select(message_length, context_length)) |> 
   mutate(runId = "1")
 yoked_human_fixed <- yoked_human |> 
-  cbind(qwen_logprobs |> 
-          filter(condition == "yoked") |> 
+  cbind(logprobs_base |> 
+          filter(type == "model_gemma",
+                 feedback == "full",
+                 condition == "yoked") |> 
           select(message_length, context_length)) |> 
   mutate(runId = "1")
 shuffled_human_fixed <- human_selections |> 
   filter(condition == "shuffled") |> 
-  cbind(qwen_logprobs |> 
-          filter(condition == "shuffled") |> 
+  cbind(logprobs_base |> 
+          filter(type == "model_gemma",
+                 feedback == "full",
+                 condition == "shuffled") |> 
           select(message_length, context_length)) |> 
   mutate(runId = as.character(workerid)) |>
   group_by(gameId, runId, condition, orig_trialNum, orig_repNum, 
@@ -204,8 +187,10 @@ shuffled_human_fixed <- human_selections |>
 
 ```{r}
 backward_human_fixed <- backward_human |> 
-  cbind(qwen_logprobs |> 
-          filter(condition == "backward") |> 
+  cbind(logprobs_base |> 
+          filter(type == "model_gemma",
+                 feedback == "full",
+                 condition == "backward") |> 
           select(message_length, context_length)) |> 
   mutate(runId = "1")
 random_msgs <- read_csv(here("context_prep", "full_feedback", "random.csv")) |> 
@@ -254,27 +239,21 @@ full_combined <- bind_rows(
   shuffled_human_fixed,
   backward_human_fixed,
   random_human_fixed,
-  qwen_logprobs,
-  gemma_logprobs,
-  llama_logprobs,
-  kimi_logprobs
+  logprobs_base
 ) |> 
   mutate(type = factor(type, levels = c("human_original", "human_naive", "model_qwen", "model_gemma", 
                                       "model_llama", "model_kimi")),
          condition = factor(condition, levels = c("yoked", "shuffled", "backward", "ablated", 
                                                   "other-within", "other-across", "random", "no context"))) |> 
-  arrange(type, condition, runId, matcher_trialNum) |>
-  group_by(type, condition, runId, target) |>
+  arrange(type, condition, runId, matcher_trialNum, feedback, image) |>
+  group_by(type, condition, runId, target, feedback, image) |>
   mutate(matcher_repNum = ifelse(condition %in% c("shuffled", "random"), 0:5, matcher_repNum)) |> 
   ungroup()
 ```
 
 ```{r}
 noimg_combined <- bind_rows(
-  qwen_logprobs_ni,
-  gemma_logprobs_ni,
-  llama_logprobs_ni,
-  kimi_logprobs_ni
+  logprobs_noimg
 ) |> 
   mutate(type = factor(type, levels = c("human_original", "human_naive", "model_qwen", "model_gemma", 
                                       "model_llama", "model_kimi")),
@@ -295,12 +274,9 @@ all_combined <- full_combined |>
   mutate(accuracy = no_image - image)
 ```
 
-```{r}
+```{r, eval=F}
 f32_combined <- bind_rows(
-  qwen_logprobs_f,
-  gemma_logprobs_f,
-  llama_logprobs_f,
-  kimi_logprobs_f
+  logprobs_f32
 ) |> 
   mutate(type = factor(type, levels = c("human_original", "human_naive", "model_qwen", "model_gemma", 
                                       "model_llama", "model_kimi")),
@@ -327,7 +303,8 @@ p_matcher <- make_accuracy_plot(full_combined)
 ggsave(here("figs", "matcher_plot.png"), p_matcher, width = 9, height = 4.5)
 p_original <- full_combined |> 
   filter(condition %in% c("shuffled", "backward", "random", "no context")) |> 
-  make_accuracy_plot(repnum_type = "original")
+  make_accuracy_plot(repnum_type = "original") +
+  COL_SCALE_NOLIM
 ggsave(here("figs", "original_plot.png"), p_original, width = 5.7, height = 4.5)
 ```
 
@@ -692,10 +669,7 @@ ggsave(here("figs", "items_plot.png"), p_items, width = 9, height = 5.5)
 
 # Learning
 ```{r}
-qwen_acc <- calculate_accuracies(qwen_logprobs_full)
-gemma_acc <- calculate_accuracies(gemma_logprobs_full)
-llama_acc <- calculate_accuracies(llama_logprobs_full)
-kimi_acc <- calculate_accuracies(kimi_logprobs_full)
+accs_full <- map(logprobs_full_base, calculate_accuracies)
 
 orig_acc <- human_orig |> 
   mutate(runId = as.character(1),
@@ -722,7 +696,7 @@ naive_acc <- human_selections |>
   calculate_accuracies(join_only = TRUE)
 
 all_acc <- bind_rows(
-  qwen_acc, gemma_acc, llama_acc, kimi_acc, orig_acc, naive_acc
+  bind_rows(accs_full), orig_acc, naive_acc
 ) |> 
   mutate(
     type = factor(type, 
@@ -777,8 +751,7 @@ ggsave(here("figs", "learning_plot.png"), p_learning, width = 9, height = 4.5)
 # Confusion matrices
 Do confusion matrices, and look at RSA across conditions
 ```{r}
-mat_conf <- bind_rows(qwen_logprobs_full, gemma_logprobs_full, 
-                      llama_logprobs_full, kimi_logprobs_full) |> 
+mat_conf <- bind_rows(logprobs_full_base) |> 
   group_by(type, condition, target, selection) |>
   summarise(
     prob = mean(prob, na.rm = TRUE),
@@ -836,9 +809,170 @@ p_rsa <- mat_conf_rsa_long |>
 ggsave(here("figs", "rsa_plot.png"), p_rsa, width = 10, height = 3.3)
 ```
 
-# Limited feedback
+# Error analysis
+```{r}
+# reload texts
+game_texts <- original_chat |>
+  mutate(
+    role = case_when(
+      role == "speaker" ~ "describer",
+      role == "listener" ~ "matcher"
+    )) |> 
+  rename(orig_trialNum = trialNum,
+         orig_repNum = repNum) |> 
+  select(gameId, orig_trialNum, orig_repNum, role, text, condition) |> 
+  mutate(role_text = glue("{role}: {text}")) |>
+  group_by(gameId, orig_trialNum, orig_repNum, condition) |> 
+  summarise(role_text = str_c(role_text, collapse = "\n"),
+            text = str_c(text, collapse = " "),
+            .groups = "drop")
+
+# lemmatise
+ud_model <- udpipe_load_model(here("resources", "english-ewt-ud-2.5-191206.udpipe"))
+game_texts_lemmas <- game_texts |> 
+  mutate(ud = map(text, \(t) udpipe_annotate(ud_model, x = str_to_lower(t)) |> 
+                    as_tibble() |> select(lemma) |> 
+                    # manual corrections
+                    mutate(lemma = case_when(
+                      lemma == "triangles" ~ "triangle", 
+                      lemma == "ears" ~ "ear",
+                      lemma == "backwards" ~ "backward",
+                      lemma == "forwards" ~ "forward",
+                      lemma == "kneeling" ~ "kneel",
+                      lemma == "leaning" ~ "lean",
+                      lemma == "shapes" ~ "shape",
+                      lemma == "shoulders" ~ "shoulder",
+                      lemma == "sitting" ~ "sit",
+                      lemma == "towards" ~ "toward",
+                      lemma == "upwards" ~ "upward",
+                      lemma == "walking" ~ "walk",
+                      .default = lemma)) |> 
+                    distinct())) |> 
+  unnest(ud)
+```
 
 ```{r}
+random_combined <- full_combined |> 
+  filter(condition == "random") |> 
+  group_by(type, gameId, orig_trialNum, orig_repNum, target) |>
+  summarise(accuracy = mean(accuracy),
+            .groups = "drop")
+```
+
+```{r}
+# error_analysis <- random_combined |> 
+#   pivot_wider(names_from = type, values_from = accuracy) |> 
+#   mutate(across(starts_with("model_"), \(x) x - human_naive, .names = "{.col}_vs_naive"))
+
+error_analysis <- random_combined |> 
+  mutate(type = ifelse(str_starts(type, "model_"), "model", "human_naive")) |> 
+  group_by(type, gameId, orig_trialNum, orig_repNum, target) |>
+  summarise(accuracy = mean(accuracy),
+            .groups = "drop") |> 
+  pivot_wider(names_from = type, values_from = accuracy) |> 
+  mutate(diff = model - human_naive) |> 
+  left_join(game_texts, by = join_by(gameId, orig_trialNum, orig_repNum))
+```
+
+```{r}
+error_analysis_lemmas <- error_analysis |> 
+  left_join(game_texts_lemmas, by = join_by(gameId, orig_trialNum, orig_repNum)) |> 
+  group_by(lemma) |> 
+  summarise(
+    n = n(),
+    n_games = n_distinct(gameId),
+    mean_diff = mean(diff, na.rm = TRUE),
+    sd_diff = sd(diff, na.rm = TRUE),
+    se_diff = sd_diff / sqrt(n),
+    ci_lower = mean_diff - qt(0.975, n - 1) * se_diff,
+    ci_upper = mean_diff + qt(0.975, n - 1) * se_diff,
+    .groups = "drop"
+  ) |> 
+  filter(n > 1) |> 
+  mutate(diff_vs_grand_mean = mean_diff - mean(error_analysis$diff, na.rm = TRUE),
+         ci_lower_vs_grand_mean = ci_lower - mean(error_analysis$diff, na.rm = TRUE),
+         ci_upper_vs_grand_mean = ci_upper - mean(error_analysis$diff, na.rm = TRUE),
+         ci_vs_grand_mean = case_when(
+           ci_lower > mean(error_analysis$diff, na.rm = TRUE) ~ "above",
+           ci_upper < mean(error_analysis$diff, na.rm = TRUE) ~ "below",
+           TRUE ~ "includes"
+         ))
+
+error_analysis_lemmas |> 
+  filter(n > 10) |> 
+  write_csv("mean_diff_by_lemma.csv")
+```
+
+
+```{r}
+# quick n dirty plot
+# body parts are bad: arm, leg, foot, hand, head
+# directions are bad: up, left, right, but not down
+# shapes ns: diamond, square, triangle, rectangle
+
+# good words: bunny, candle (but just two games)
+
+SEARCH_WORD = "candle"
+
+error_analysis |> 
+  mutate(!!SEARCH_WORD := str_detect(text, SEARCH_WORD)) |>
+  ggplot(aes(x = diff, fill = !!sym(SEARCH_WORD))) +
+  geom_density(alpha = .6)
+
+# t-test for search vs full distribution
+t.test(
+  error_analysis |> pull(diff),
+  error_analysis |> filter(str_detect(text, SEARCH_WORD)) |> pull(diff)
+)
+```
+
+Trying a different plot
+```{r}
+lemmas_annotated <- read_csv(here("resources", "lemmas_annotated.csv"))
+
+error_analysis_lemmas_annotated <- error_analysis_lemmas |> 
+  left_join(lemmas_annotated, by = join_by(lemma)) |> 
+  filter(!is.na(category)) |> 
+  mutate(category = fct_reorder(category, diff_vs_grand_mean),
+         lemma = fct_reorder(lemma, diff_vs_grand_mean, .desc = TRUE))
+
+p_errors <- error_analysis_lemmas_annotated |> 
+  mutate(signif = ifelse(ci_vs_grand_mean == "includes", "no", "yes")) |>
+  ggplot(aes(x = diff_vs_grand_mean, y = lemma, col = category)) +
+  geom_vline(xintercept = 0, lty = "dashed") +
+  geom_errorbarh(aes(xmin = ci_lower_vs_grand_mean, xmax = ci_upper_vs_grand_mean),
+                 height = .4) +
+  geom_point(aes(shape = signif), size = 2) +
+  facet_grid(category ~ ., scales = "free_y", space = "free_y") +
+  scale_shape_manual(values = c(1, 16)) +
+  labs(x = "Centred discrepancy (model – human)", y = "Lemma") +
+  theme(legend.position = "none")
+
+ggsave(here("figs", "error_plot.png"), p_errors, width = 6, height = 8)
+```
+
+For completeness
+```{r}
+error_analysis_lemmas |> 
+  left_join(lemmas_annotated, by = join_by(lemma)) |> 
+  filter(is.na(category), n >= 20, n_games >= 4) |> 
+  mutate(lemma = fct_reorder(lemma, diff_vs_grand_mean, .desc = TRUE)) |> 
+  mutate(signif = ifelse(ci_vs_grand_mean == "includes", "no", "yes")) |>
+  ggplot(aes(x = diff_vs_grand_mean, y = lemma, col = category)) +
+  geom_vline(xintercept = 0, lty = "dashed") +
+  geom_errorbarh(aes(xmin = ci_lower_vs_grand_mean, xmax = ci_upper_vs_grand_mean),
+                 height = .4) +
+  geom_point(aes(shape = signif), size = 2) +
+  facet_grid(category ~ ., scales = "free_y", space = "free_y") +
+  scale_shape_manual(values = c(1, 16)) +
+  labs(x = "Centred discrepancy (model – human)", y = "Lemma") +
+  theme(legend.position = "none")
+```
+
+
+# Limited feedback
+
+```{r, eval=F}
 qwen_logprobs_full_lf_hh <- get_all_logprobs("Qwen2.5-VL-32B-Instruct", 
                                              prefix = "human_history/limited_feedback_")
 gemma_logprobs_full_lf_hh <- get_all_logprobs("gemma-3-27b-it", 

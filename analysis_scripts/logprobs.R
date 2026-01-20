@@ -100,6 +100,52 @@ logprobs_to_long <- function(logprobs) {
   logprobs_combined
 }
 
+load_logprobs <- function(file_name) {
+  logprobs <- read_csv(here(OUTPUT_LOC, file_name), show_col_types = FALSE) |>
+    logprobs_to_long()
+
+  condition_name <- file_name |>
+    str_replace(".*/", "") |>
+    str_replace("limited_feedback_", "") |>
+    str_replace("gemma", "Gemma") |>
+    str_extract("^[a-z_]+(?=_)") |>
+    str_replace_all("wrong_", "other-") |>
+    str_replace("no_context", "no context") |>
+    str_replace("backwards", "backward")
+  if (condition_name == "backward") {
+    logprobs <- logprobs |>
+      mutate(
+        orig_trialNum = 71 - orig_trialNum,
+        orig_repNum = 5 - orig_repNum
+      )
+  }
+
+  model_name <- file_name |>
+    str_extract("(?<=_)([A-Za-z0-9.-]+)(?=_logprobs)")
+  feedback_type <- file_name |>
+    str_extract("^.*(?=/)") |>
+    str_replace_all(c(
+      "full_feedback" = "full",
+      "human_yoked" = "limited human-yoked",
+      "interactive" = "limited interactive"
+    ))
+  image_type <- if (str_detect(file_name, "no_image")) {
+    "no image"
+  } else {
+    "image"
+  }
+
+  logprobs |>
+    mutate(
+      file_name = file_name,
+      model_name = model_name,
+      type = glue("model_{model_name |> str_to_lower() |> str_extract('^[a-z]+')}"),
+      condition = condition_name,
+      feedback = feedback_type,
+      image = image_type
+    )
+}
+
 get_all_logprobs <- function(model_name, no_image = FALSE, float32 = FALSE, prefix = "") {
   modstr <- if (no_image) "_no_image" else if (float32) "_float32" else ""
   yoked <- read_csv(here(OUTPUT_LOC, glue("{prefix}yoked_{model_name}_logprobs{modstr}.csv"))) |>
