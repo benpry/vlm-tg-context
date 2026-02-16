@@ -6,30 +6,10 @@ from io import BytesIO
 import numpy as np
 
 
-def get_image_token(model_name, include_image: bool = True):
-    """
-    Get the image token for a given model.
-    """
-    if not include_image:
-        return ""
-
-    model_name = model_name.lower()
-    if "gemma" in model_name:
-        return "<image>"
-    elif "llama" in model_name:
-        return "<|image|>"
-    elif "qwen" in model_name:
-        return "<|vision_start|><|image_pad|><|vision_end|>"
-    elif "kimi" in model_name:
-        return "<|media_start|>image<|media_content|><|media_pad|><|media_end|>"
-    else:
-        raise ValueError(f"Model {model_name} not supported")
-
-
 def get_messages(system_prompt, chat_prompt, include_image, grid_image, model_name):
     messages = []
-    if "gemma" in model_name.lower():
-        # gemma models don't have a system role, so we add the instruction to the first user message
+    if "gemma" in model_name.lower() or "molmo" in model_name.lower():
+        # gemma and molmo models don't have a system role, so we add the instruction to the first user message
         messages = [*chat_prompt]
         if include_image:
             messages[0]["content"] = [
@@ -184,11 +164,32 @@ def encode_image(image):
     return base64.b64encode(buffered.getvalue()).decode("utf-8")
 
 
-def get_openai_messages(system_prompt, chat_prompt, include_image, grid_image):
-    messages = [{"role": "system", "content": system_prompt}]
-
+def get_openai_messages(
+    system_prompt, chat_prompt, include_image, grid_image, model_name=""
+):
     # Copy chat_prompt to avoid mutating original
     chat_messages = [msg.copy() for msg in chat_prompt]
+
+    # Molmo2 models don't support a system role, so we prepend the system
+    # instruction to the first user message instead.
+    if "Molmo2" in model_name:
+        messages = []
+        # Prepend system prompt to first user message
+        for i, msg in enumerate(chat_messages):
+            if msg["role"] == "user":
+                if isinstance(msg["content"], str):
+                    chat_messages[i]["content"] = (
+                        f"{system_prompt}\n{msg['content']}"
+                    )
+                elif isinstance(msg["content"], list):
+                    # If content is already a list, prepend system prompt as text
+                    chat_messages[i]["content"] = [
+                        {"type": "text", "text": system_prompt},
+                        *msg["content"],
+                    ]
+                break
+    else:
+        messages = [{"role": "system", "content": system_prompt}]
 
     if include_image and chat_messages:
         # Find first user message
@@ -202,13 +203,28 @@ def get_openai_messages(system_prompt, chat_prompt, include_image, grid_image):
             content = chat_messages[first_user_idx]["content"]
             base64_image = encode_image(grid_image)
 
-            new_content = [
-                {
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/png;base64,{base64_image}"},
-                },
-                {"type": "text", "text": content},
-            ]
+            if isinstance(content, list):
+                # Content is already a list (e.g. system prompt was prepended);
+                # insert the image at the beginning.
+                new_content = [
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/png;base64,{base64_image}"
+                        },
+                    },
+                    *content,
+                ]
+            else:
+                new_content = [
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/png;base64,{base64_image}"
+                        },
+                    },
+                    {"type": "text", "text": content},
+                ]
             chat_messages[first_user_idx]["content"] = new_content
 
     messages.extend(chat_messages)

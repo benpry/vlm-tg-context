@@ -26,7 +26,7 @@ Please answer with just the letter corresponding to the image you think the desc
 """
 
 
-@retry(wait=wait_exponential(multiplier=1, min=4, max=60), stop=stop_after_attempt(10))
+# @retry(wait=wait_exponential(multiplier=1, min=4, max=60), stop=stop_after_attempt(10))
 def get_completion_with_backoff(client, model, messages):
     if "gemini" in model.lower():
         # use the google genai client
@@ -35,7 +35,7 @@ def get_completion_with_backoff(client, model, messages):
             model=model,
             contents=genai_messages,
             system_instruction=system_instruction,
-            geneartion_config=types.GenerateContentConfig(
+            generation_config=types.GenerateContentConfig(
                 response_logprobs=True, logprobs=20, temperature=1
             ),
         )
@@ -105,7 +105,7 @@ def get_logits(
 
     print("Preparing messages...")
     all_messages = [
-        get_openai_messages(SYSTEM_PROMPT, chat_prompt, include_image, grid_image)
+        get_openai_messages(SYSTEM_PROMPT, chat_prompt, include_image, grid_image, model_name)
         for chat_prompt in df["chat_prompt"]
     ]
 

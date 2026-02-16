@@ -39,7 +39,7 @@ vllm serve $MODEL_NAME \
  --gpu-memory-utilization 0.95 \
  --max-num-seqs 8 \
  --max-logprobs 1000 \
- --trust-remote-code &
+ --trust-remote-code > /dev/null &
 
 sleep 5m
 

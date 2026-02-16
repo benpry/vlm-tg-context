@@ -98,7 +98,7 @@ if __name__ == "__main__":
                 client,
                 grid_image,
                 include_image=not args.no_image,
-                n_trials=args.n_trials,
+               n_trials=args.n_trials,
             )
 
         print(f"Saving {output_path}...")

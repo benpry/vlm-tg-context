@@ -122,7 +122,7 @@ def run_interactive_evaluation(
         row_messages = []
         for idx, row in df_round.iterrows():
             messages = get_openai_messages(
-                SYSTEM_PROMPT, row["chat_prompt"], include_image, grid_image
+                SYSTEM_PROMPT, row["chat_prompt"], include_image, grid_image, model_name
             )
             row_messages.append(messages)
 
