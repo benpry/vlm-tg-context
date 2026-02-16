@@ -12,7 +12,7 @@ dependencies = [
     "pyprojroot>=0.3.0",
     "tenacity>=9.1.2",
     "tqdm>=4.67.1",
-    "vllm==0.10.2",
-    "transformers==4.56.2",
+    "vllm==0.15.1",
+    "transformers==4.57.6",
     "ipykernel>=7.1.0",
 ]

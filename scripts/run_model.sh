@@ -35,6 +35,7 @@ vllm serve $MODEL_NAME \
  --port ${PORT} \
  --limit-mm-per-prompt '{"image":1}' \
  --max-model-len 8192 \
+ --max-num-batched-tokens 8192 \
  --gpu-memory-utilization 0.95 \
  --max-num-seqs 8 \
  --max-logprobs 1000 \
