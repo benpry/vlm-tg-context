@@ -679,7 +679,11 @@ r1 <- r1_msg |>
   rename(target = tangram) |>
   select(-messages)
 
-write_csv(r1, here("context_prep", "practice", "r1.csv"))
+r1 |> filter(shuffle_rep<4) |> write_csv(here("context_prep", "practice", "r1_part1.csv"))
+r1 |> filter(shuffle_rep<8 & shuffle_rep>3) |> write_csv(here("context_prep", "practice", "r1_part2.csv"))
+r1 |> filter(shuffle_rep>7) |> write_csv(here("context_prep", "practice", "r1_part3.csv"))
+
+
 ```
 
 ```{r}
