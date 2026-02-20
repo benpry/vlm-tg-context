@@ -630,3 +630,103 @@ backwards <- backwards_msg |>
 
 write_csv(backwards, here("context_prep", "human_history", "limited_feedback_backwards.csv"))
 ```
+
+# Practice
+
+```{r}
+r1_msg <- nested |> filter(repNum==0) |> select(-repNum) |> expand_grid(shuffle_rep=1:10, repNum=0:5) |> 
+  mutate(correct=TRUE) |>
+  group_by(gameId, shuffle_rep, repNum) |> 
+  slice_sample(prop=1) |> 
+  group_by(gameId, shuffle_rep) |> 
+  mutate(trialNum=row_number()-1)
+
+ r1_cumul <- r1_msg |>
+  select(shuffle_rep, gameId, trialNum) |>
+  left_join(
+    r1_msg |>
+      select(
+        shuffle_rep,
+        gameId,
+        msg_trialnum = trialNum,
+        messages,
+        tangram,
+        correct
+      ),
+    by = join_by(shuffle_rep, gameId, trialNum > msg_trialnum)
+  ) |>
+  group_by(shuffle_rep, gameId, trialNum) |>
+  summarise(
+    message_history = messages |> toJSON(),
+    target_history = tangram |> toJSON(),
+    correctness_history = correct |> toJSON(),
+    selection_history = tangram |> toJSON(),
+    .groups = "drop"
+  ) |>
+  mutate(
+    message_history = ifelse(message_history == "[{}]", "[]", message_history),
+    target_history = ifelse(target_history == "[null]", "[]", target_history),
+    selection_history = ifelse(selection_history == "[null]", "[]", selection_history),
+    correctness_history = ifelse(correctness_history == "[null]", "[]", correctness_history),
+  )
+ 
+r1 <- r1_msg |>
+  left_join(r1_cumul, by = join_by(shuffle_rep, gameId, trialNum)) |>
+  mutate(
+    message = map_vec(messages, toJSON),
+    condition = "r1_practice"
+  ) |>
+  rename(target = tangram) |>
+  select(-messages)
+
+write_csv(r1, here("context_prep", "practice", "r1.csv"))
+```
+
+```{r}
+r6_msg <- nested |> filter(repNum==5) |> select(-repNum) |> expand_grid(shuffle_rep=1:10, repNum=0:5) |> 
+  mutate(correct=TRUE) |>
+  group_by(gameId, shuffle_rep, repNum) |> 
+  slice_sample(prop=1) |> 
+  group_by(gameId, shuffle_rep) |> 
+  mutate(trialNum=row_number()-1)
+
+ r6_cumul <- r6_msg |>
+  select(shuffle_rep, gameId, trialNum) |>
+  left_join(
+    r6_msg |>
+      select(
+        shuffle_rep,
+        gameId,
+        msg_trialnum = trialNum,
+        messages,
+        tangram,
+        correct
+      ),
+    by = join_by(shuffle_rep, gameId, trialNum > msg_trialnum)
+  ) |>
+  group_by(shuffle_rep, gameId, trialNum) |>
+  summarise(
+    message_history = messages |> toJSON(),
+    target_history = tangram |> toJSON(),
+    correctness_history = correct |> toJSON(),
+    selection_history = tangram |> toJSON(),
+    .groups = "drop"
+  ) |>
+  mutate(
+    message_history = ifelse(message_history == "[{}]", "[]", message_history),
+    target_history = ifelse(target_history == "[null]", "[]", target_history),
+    selection_history = ifelse(selection_history == "[null]", "[]", selection_history),
+    correctness_history = ifelse(correctness_history == "[null]", "[]", correctness_history),
+  )
+ 
+r6 <- r6_msg |>
+  left_join(r6_cumul, by = join_by(shuffle_rep, gameId, trialNum)) |>
+  mutate(
+    message = map_vec(messages, toJSON),
+    condition = "r6_practice"
+  ) |>
+  rename(target = tangram) |>
+  select(-messages)
+
+write_csv(r6, here("context_prep", "practice", "r6.csv"))
+```
