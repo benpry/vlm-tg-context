@@ -144,8 +144,9 @@ random_human <- human_selections_new |>
 ```{r}
 logprob_files <- list.files(here("data", "logprobs"), recursive = TRUE)
 
-full_logprobs <- map(logprob_files, \(f) {
-  load_logprobs(f)
+full_logprobs <- map(logprob_files[95:116], \(f) {
+  if (f == "human_yoked/limited_feedback_yoked_Molmo2-8B_logprobs.csv") NULL
+  else load_logprobs(f)
 }) |> list_rbind()
 
 logprobs_base <- full_logprobs |> 
@@ -231,7 +232,6 @@ random_human_fixed <- human_selections_new |>
   mutate(type = "human_naive")
 ```
 
-
 ```{r}
 full_combined <- bind_rows(
   human_orig_fixed,
@@ -252,47 +252,11 @@ full_combined <- bind_rows(
 ```
 
 ```{r}
-noimg_combined <- bind_rows(
-  logprobs_noimg
-) |> 
-  mutate(type = factor(type, levels = c("human_original", "human_naive", "model_qwen", "model_gemma", 
-                                      "model_llama", "model_kimi")),
-         condition = factor(condition, levels = c("yoked", "shuffled", "backward", "ablated", 
-                                                  "other-within", "other-across", "random", "no context"))) |> 
-  arrange(type, condition, runId, matcher_trialNum) |>
-  group_by(type, condition, runId, target) |>
-  mutate(matcher_repNum = ifelse(condition %in% c("shuffled", "random"), 0:5, matcher_repNum)) |> 
-  ungroup()
-```
-
-```{r}
 all_combined <- full_combined |> 
-  mutate(img_type = "image") |> 
-  filter(str_starts(type, "model_")) |>
-  bind_rows(noimg_combined |> mutate(img_type = "no_image")) |> 
-  pivot_wider(names_from = img_type, values_from = accuracy) |> 
-  mutate(accuracy = no_image - image)
-```
-
-```{r, eval=F}
-f32_combined <- bind_rows(
-  logprobs_f32
-) |> 
-  mutate(type = factor(type, levels = c("human_original", "human_naive", "model_qwen", "model_gemma", 
-                                      "model_llama", "model_kimi")),
-         condition = factor(condition, levels = c("yoked", "shuffled", "backward", "ablated", 
-                                                  "other-within", "other-across", "random", "no context"))) |> 
-  arrange(type, condition, runId, matcher_trialNum) |>
-  group_by(type, condition, runId, target) |>
-  mutate(matcher_repNum = ifelse(condition %in% c("shuffled", "random"), 0:5, matcher_repNum)) |> 
-  ungroup()
-
-f32_comp <- full_combined |> 
-  mutate(f_type = "bf16") |> 
-  filter(str_starts(type, "model_")) |>
-  bind_rows(f32_combined |> mutate(f_type = "float32")) |>
-  pivot_wider(names_from = f_type, values_from = accuracy) |>
-  mutate(accuracy = float32 - bf16)
+  rename(image_type = image) |> 
+  pivot_wider(names_from = image_type,
+              values_from = accuracy) |> 
+  mutate(accuracy = image - `no image`)
 ```
 
 
@@ -330,59 +294,11 @@ ggsave(here("figs", "big_plot.png"), p_big, width = 10, height = 5.5)
 
 ## No image plots
 ```{r}
-all_comb <- full_combined |> mutate(img_type = "Image") |> 
-  bind_rows(noimg_combined |> mutate(img_type = "No image")) |> 
-  mutate(
-    repnum = matcher_repNum + 1,
-    trialnum = matcher_trialNum + 1,
-    condition = factor(condition, levels = condition_order)
-  ) |>
-  ggplot(aes(x = repnum, y = accuracy, col = type, 
-             shape = img_type, lty = img_type)) +
-  geom_hline(yintercept = 1 / 12, lty = "dashed") +
-  # geom_smooth(method = "glm", formula = y ~ log(x)) +
-  geom_smooth(
-    method = "loess", formula = y ~ x, se = FALSE,
-    show.legend = TRUE
-  ) +
-  stat_summary(
-    fun.data = mean_cl_boot, geom = "pointrange",
-    lty = "solid",
-    show.legend = TRUE
-  ) +
-  scale_x_continuous(breaks = 1:6) +
-  COL_SCALE +
-  labs(
-    x = glue("Matcher repetition number"),
-    y = "Accuracy", col = "Matcher"
-  ) +
-  facet_wrap(
-    ~condition,
-    nrow = 2,
-    labeller = as_labeller(str_to_sentence)
-  )
-```
-
-```{r}
-p_noimg <- make_accuracy_plot(noimg_combined) +
-  COL_SCALE_NOLIM
-ggsave(here("figs", "noimg_plot.png"), p_noimg, width = 9, height = 4.5)
-```
-
-
-```{r}
 p_noimg_diff <- all_combined |> 
   make_accuracy_plot(ref_level = 0) +
   COL_SCALE_NOLIM +
   labs(y = "Accuracy difference (text-only − image–text)")
 ggsave(here("figs", "diff_plot.png"), p_noimg_diff, width = 9, height = 4.5)
-```
-
-```{r}
-p_f32_diff <- f32_comp |> 
-  make_accuracy_plot(ref_level = 0) +
-  COL_SCALE_NOLIM +
-  labs(y = "Accuracy difference (float32 − bf16)")
 ```
 
 
