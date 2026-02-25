@@ -4,6 +4,7 @@ from glob import glob
 
 import pandas as pd
 from openai import OpenAI
+from google import genai
 from PIL import Image
 from pyprojroot import here
 
@@ -69,6 +70,10 @@ if __name__ == "__main__":
         print(f"using api key: {client.api_key}")
 
     for filepath, df in zip(data_filepaths, dfs):
+        # only run yoked evaluations if we're not using a local model
+        if "localhost" not in args.api_base and "yoked" not in filepath:
+            continue
+
         output_path = filepath.replace(
             ".csv",
             f"_{args.model_name.split('/')[-1]}_logprobs{'_no_image' if args.no_image else ''}.csv",

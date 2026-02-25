@@ -256,6 +256,28 @@ def get_logprobs_from_openai_choice(choice, choice_tokens):
     return choice_logprobs
 
 
+def get_logprobs_from_genai_response(response, choice_tokens):
+    candidates = response.candidates
+    if not candidates or not candidates[0].logprobs_result:
+        return {}
+    top_candidates = candidates[0].logprobs_result.top_candidates
+    if not top_candidates:
+        return {}
+    first_token_candidates = top_candidates[0].candidates
+    choice_logprobs = {}
+    for candidate in first_token_candidates:
+        token = candidate.token.strip()
+        if token in choice_tokens:
+            if token in choice_logprobs:
+                choice_logprobs[token] = float(
+                    np.logaddexp(choice_logprobs[token], candidate.log_probability)
+                )
+            else:
+                choice_logprobs[token] = candidate.log_probability
+    if not all(token in choice_logprobs for token in choice_tokens):
+        warnings.warn("Not all choice tokens found in top logprobs.")
+    return choice_logprobs
+
 from google.genai import types
 
 

@@ -13,6 +13,7 @@ from tqdm import tqdm
 
 from src.lm import CHOICES, SYSTEM_PROMPT, get_completion_with_backoff
 from src.utils import (
+    get_logprobs_from_genai_response,
     get_logprobs_from_openai_choice,
     get_openai_messages,
     preprocess_messages,
@@ -73,7 +74,10 @@ def process_interactive_row(client, model_name, messages):
         messages=messages,
     )
 
-    choice_logprobs = get_logprobs_from_openai_choice(response.choices[0], CHOICES)
+    if "gemini" in model_name.lower():
+        choice_logprobs = get_logprobs_from_genai_response(response, CHOICES)
+    else:
+        choice_logprobs = get_logprobs_from_openai_choice(response.choices[0], CHOICES)
 
     if choice_logprobs:
         prediction = max(choice_logprobs, key=choice_logprobs.get)

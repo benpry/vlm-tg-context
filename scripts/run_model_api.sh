@@ -1,6 +1,7 @@
 #!/bin/zsh
 #SBATCH --account=cocoflops
 #SBATCH --partition=cocoflops
+#SBATCH --exclude=cocoflops-hgx-1
 #SBATCH --nodes=1
 #SBATCH --mem=32G
 #SBATCH --cpus-per-task=4

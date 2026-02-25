@@ -6,14 +6,15 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
 import pandas as pd
+from google.genai import types
 from openai import OpenAI
 from PIL import Image
-from tqdm import tqdm
-
 from tenacity import retry, stop_after_attempt, wait_exponential
+from tqdm import tqdm
 
 from src.utils import (
     convert_to_google_genai_style,
+    get_logprobs_from_genai_response,
     get_logprobs_from_openai_choice,
     get_openai_messages,
     preprocess_messages,
@@ -26,7 +27,7 @@ Please answer with just the letter corresponding to the image you think the desc
 """
 
 
-# @retry(wait=wait_exponential(multiplier=1, min=4, max=60), stop=stop_after_attempt(10))
+@retry(wait=wait_exponential(multiplier=1, min=4, max=60), stop=stop_after_attempt(10))
 def get_completion_with_backoff(client, model, messages):
     if "gemini" in model.lower():
         # use the google genai client
@@ -34,9 +35,11 @@ def get_completion_with_backoff(client, model, messages):
         return client.models.generate_content(
             model=model,
             contents=genai_messages,
-            system_instruction=system_instruction,
-            generation_config=types.GenerateContentConfig(
-                response_logprobs=True, logprobs=20, temperature=1
+            config=types.GenerateContentConfig(
+                response_logprobs=True,
+                logprobs=20,
+                temperature=1,
+                system_instruction=system_instruction,
             ),
         )
     else:
@@ -70,7 +73,10 @@ def get_logits_single_row(
         model=model_name,
         messages=messages,
     )
-    return get_logprobs_from_openai_choice(response.choices[0], CHOICES)
+    if "gemini" in model_name.lower():
+        return get_logprobs_from_genai_response(response, CHOICES)
+    else:
+        return get_logprobs_from_openai_choice(response.choices[0], CHOICES)
 
 
 REQUIRED_COLUMNS = [
@@ -105,7 +111,9 @@ def get_logits(
 
     print("Preparing messages...")
     all_messages = [
-        get_openai_messages(SYSTEM_PROMPT, chat_prompt, include_image, grid_image, model_name)
+        get_openai_messages(
+            SYSTEM_PROMPT, chat_prompt, include_image, grid_image, model_name
+        )
         for chat_prompt in df["chat_prompt"]
     ]
 
