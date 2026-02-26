@@ -6,14 +6,15 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
 import pandas as pd
+import tiktoken
 from google.genai import types
 from openai import OpenAI
 from PIL import Image
-from tenacity import retry, stop_after_attempt, wait_exponential
 from tqdm import tqdm
 
 from src.utils import (
     convert_to_google_genai_style,
+    encode_image,
     get_logprobs_from_genai_response,
     get_logprobs_from_openai_choice,
     get_openai_messages,
@@ -27,7 +28,7 @@ Please answer with just the letter corresponding to the image you think the desc
 """
 
 
-@retry(wait=wait_exponential(multiplier=1, min=4, max=60), stop=stop_after_attempt(10))
+# @retry(wait=wait_exponential(multiplier=1, min=4, max=60), stop=stop_after_attempt(10))
 def get_completion_with_backoff(client, model, messages):
     if "gemini" in model.lower():
         # use the google genai client
@@ -133,3 +134,95 @@ def get_logits(
     df["model_logprobs"] = all_choice_logprobs
 
     return df.drop(columns=["chat_prompt"])
+
+
+def _get_encoding(model_name: str):
+    """Get a tiktoken encoding, falling back to cl100k_base for unknown models."""
+    try:
+        return tiktoken.encoding_for_model(model_name)
+    except KeyError:
+        return tiktoken.get_encoding("cl100k_base")
+
+
+def _count_message_tokens(messages: list, encoding) -> int:
+    """Count text tokens in an OpenAI-style message list (skipping image data)."""
+    total = 0
+    for msg in messages:
+        content = msg.get("content", "")
+        if isinstance(content, str):
+            total += len(encoding.encode(content))
+        elif isinstance(content, list):
+            for part in content:
+                if part.get("type") == "text":
+                    total += len(encoding.encode(part["text"]))
+                # image_url parts are counted separately
+    return total
+
+
+def _estimate_image_tokens(grid_image: Image.Image) -> int:
+    """Estimate token count for a base64-encoded PNG image.
+
+    Uses a rough heuristic: base64 bytes * 3/4 (to get raw bytes) / 768 tiles,
+    ~170 tokens per tile. This is approximate and varies by provider.
+    """
+    base64_str = encode_image(grid_image)
+    raw_bytes = len(base64_str) * 3 / 4
+    n_tiles = max(1, raw_bytes / 768)
+    return int(n_tiles * 170)
+
+
+def _count_chat_prompt_tokens(chat_prompt: list, encoding) -> int:
+    """Count text tokens in a preprocessed chat prompt (list of role/content dicts)."""
+    total = 0
+    for msg in chat_prompt:
+        content = msg.get("content", "")
+        if isinstance(content, str):
+            total += len(encoding.encode(content))
+    return total
+
+
+def count_tokens(
+    df: pd.DataFrame,
+    model_name: str,
+    grid_image: Image.Image,
+    include_image: bool = True,
+    n_trials: Optional[int] = None,
+) -> dict:
+    """Count input/output tokens without calling the API.
+
+    Counts tokens directly from preprocessed chat prompts plus the system prompt,
+    avoiding expensive per-row image encoding.
+    """
+    missing_columns = [col for col in REQUIRED_COLUMNS if col not in df.columns]
+    if missing_columns:
+        raise ValueError(f"Missing required columns: {missing_columns}.")
+
+    if n_trials is not None:
+        df = df.head(n_trials)
+
+    encoding = _get_encoding(model_name)
+    system_prompt_tokens = len(encoding.encode(SYSTEM_PROMPT))
+    image_tokens = _estimate_image_tokens(grid_image) if include_image else 0
+
+    df["chat_prompt"] = df.apply(preprocess_messages, axis=1)
+
+    text_token_counts = [
+        system_prompt_tokens + _count_chat_prompt_tokens(chat_prompt, encoding)
+        for chat_prompt in df["chat_prompt"]
+    ]
+
+    n_rows = len(text_token_counts)
+    total_input = sum(text_token_counts) + (image_tokens * n_rows)
+    total_output = n_rows  # max_tokens=1 per row
+
+    return {
+        "n_rows": n_rows,
+        "total_input_tokens": total_input,
+        "total_output_tokens": total_output,
+        "image_tokens_per_row": image_tokens,
+        "text_tokens_per_row": {
+            "min": min(text_token_counts),
+            "max": max(text_token_counts),
+            "mean": sum(text_token_counts) / len(text_token_counts),
+        },
+    }

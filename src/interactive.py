@@ -3,6 +3,7 @@ Code for the interactive version of the language model evaluation, where the mod
 feedback on its own choices rather than human responses.
 """
 
+import random
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
@@ -11,7 +12,14 @@ from openai import OpenAI
 from PIL import Image
 from tqdm import tqdm
 
-from src.lm import CHOICES, SYSTEM_PROMPT, get_completion_with_backoff
+from src.lm import (
+    CHOICES,
+    SYSTEM_PROMPT,
+    _count_chat_prompt_tokens,
+    _estimate_image_tokens,
+    _get_encoding,
+    get_completion_with_backoff,
+)
 from src.utils import (
     get_logprobs_from_genai_response,
     get_logprobs_from_openai_choice,
@@ -152,3 +160,72 @@ def run_interactive_evaluation(
         update_histories(df, trial_num)
 
     return df
+
+
+def count_tokens_interactive(
+    df: pd.DataFrame,
+    model_name: str,
+    grid_image: Image.Image,
+    include_image: bool = True,
+    n_trials: Optional[int] = None,
+) -> dict:
+    """Count input/output tokens for interactive evaluation without calling the API.
+
+    Uses random dummy responses (A-L) to simulate history updates so that
+    later rounds have realistic context lengths.
+    """
+    if n_trials is not None:
+        df = df.head(n_trials)
+
+    if "trialNum" not in df.columns:
+        df["trialNum"] = df["matcher_trialNum"]
+
+    df["selection_history"] = [[] for _ in range(len(df))]
+    df["correctness_history"] = [[] for _ in range(len(df))]
+    df["model_prediction"] = None
+
+    encoding = _get_encoding(model_name)
+    system_prompt_tokens = len(encoding.encode(SYSTEM_PROMPT))
+    image_tokens = _estimate_image_tokens(grid_image) if include_image else 0
+
+    text_token_counts = []
+    total_rows = 0
+
+    for trial_num in range(df["trialNum"].max() + 1):
+        df_round = df[df["trialNum"] == trial_num].copy()
+        if df_round.empty:
+            continue
+
+        df_round["chat_prompt"] = df_round.apply(preprocess_messages, axis=1)
+
+        for idx, row in df_round.iterrows():
+            tokens = system_prompt_tokens + _count_chat_prompt_tokens(
+                row["chat_prompt"], encoding
+            )
+            text_token_counts.append(tokens)
+            total_rows += 1
+
+        # Use random dummy predictions to update histories for future rounds
+        predictions = [random.choice(CHOICES) for _ in range(len(df_round))]
+        df.loc[df_round.index, "model_prediction"] = predictions
+
+        update_histories(df, trial_num)
+
+    total_input = sum(text_token_counts) + (image_tokens * total_rows)
+    total_output = total_rows
+
+    return {
+        "n_rows": total_rows,
+        "total_input_tokens": total_input,
+        "total_output_tokens": total_output,
+        "image_tokens_per_row": image_tokens,
+        "text_tokens_per_row": {
+            "min": min(text_token_counts) if text_token_counts else 0,
+            "max": max(text_token_counts) if text_token_counts else 0,
+            "mean": (
+                sum(text_token_counts) / len(text_token_counts)
+                if text_token_counts
+                else 0
+            ),
+        },
+    }

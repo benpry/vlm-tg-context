@@ -1,6 +1,6 @@
-MODELS=("gpt-5.2" "claude-4-5-sonnet")
-API_BASES=("https://api.openai.com/v1" "https://api.anthropic.com/v1")
+MODELS=("Qwen/Qwen2.5-VL-32B-Instruct" "google/gemma-3-27b-it" "moonshotai/Kimi-VL-A3B-Instruct" "Qwen/Qwen3-VL-32B-Instruct" "allenai/Molmo2-8B")
 ARGS="--interactive"
-for i in "${!MODELS[@]}"; do
-    sbatch run_model_api.sh "${MODELS[$i]}" $ARGS --api_base "${API_BASES[$i]}"
+
+for model in "${MODELS[@]}"; do
+    sbatch run_model.sh $model $ARGS
 done
