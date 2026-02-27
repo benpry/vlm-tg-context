@@ -50,7 +50,7 @@ if __name__ == "__main__":
 
     # Handle --yoked flag as alias for human_history data
     if args.yoked or args.interactive:
-        data_dijr = "human_history"
+        data_dir = "human_history"
     else:
         data_dir = "full_feedback"
 
